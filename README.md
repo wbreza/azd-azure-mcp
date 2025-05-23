@@ -56,6 +56,29 @@ MCP contributors can leverage the [`azd` Extension Framework](https://github.com
 
 MCP extensions can be hosted on official `azd` extension source or can reside in a custom extension source hosted in a local file or publicly accessible HTTPS endpoint.
 
+## Dynamic Discovery & the "Learn" Pattern
+
+The root `mcp.azure` server uses a dynamic discovery mechanism to enumerate and expose all available Azure MCP extensions at runtime. When the server starts, or when an agent or user requests to "learn" about available tools, the server:
+
+- Calls `azd ext list --tags azure,mcp` to discover all installed and available MCP extensions.
+- Dynamically installs any missing extensions on demand.
+- Starts the MCP server for each provider extension only when needed.
+- Maintains a cache of running tool clients to avoid redundant startups.
+
+### The "Learn" Pattern
+
+The "learn" pattern is a core feature for LLMs/agents and users to explore available capabilities. When a request is made with the `learn` argument set to `true`, the root server returns a list of available tools and their schemas. This response uses the **same MCP tool list schema** as the MCP protocol itself, ensuring:
+
+- Consistency: The tool list and schema are always up-to-date and machine-readable.
+- Iterative Exploration: Agents can call `learn` recursively, specifying a tool name to drill down into its supported commands and parameters.
+- Self-Describing: The system is fully self-describing, enabling agents to reason about and select tools programmatically.
+
+For example:
+- `learn: true` with no tool specified returns the top-level list of available tools (e.g., storage, keyvault, resource, azd, etc.).
+- `learn: true, tool: "storage"` returns the list of commands and parameters supported by the storage extension, using the same MCP tool schema.
+
+This approach makes the system highly discoverable and agent-friendly, supporting robust, real-time, and iterative automation scenarios.
+
 ## Architecture & Flow (Sequence Diagram)
 
 The following sequence diagram illustrates the dynamic, on-demand nature of extension management and call dispatching:
