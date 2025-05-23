@@ -56,29 +56,6 @@ MCP contributors can leverage the [`azd` Extension Framework](https://github.com
 
 MCP extensions can be hosted on official `azd` extension source or can reside in a custom extension source hosted in a local file or publicly accessible HTTPS endpoint.
 
-## Design Tradeoffs: Dynamic Extensions vs. Monolithic Server
-
-This project uses a **dynamic extension model**: the root `mcp.azure` server discovers, installs, and starts provider MCP extensions on demand. This is in contrast to a **monolithic model** where all MCP tools are coded, shipped, and loaded in the root server.
-
-**Dynamic Extension Model (current):**
-
-- Extensions are developed, shipped, and updated independently.
-- New tools/extensions require no changes to the root server.
-- Only required extensions are loaded, reducing resource usage and startup time.
-- Enables teams to use any language or tech stack.
-- Slightly higher first-use latency due to extra roundtrips: discovery, possible install, and server startup before the first tool/command call. Subsequent calls are fast due to caching.
-- Keeps the tool surface minimal and relevant for LLMs/agents, reducing the risk of tool bloat, confusion, or delay during initial tool selection.
-
-**Monolithic Model (all tools in root):**
-
-- All tools are always available, with no install/start delay.
-- Simpler architecture, but all tools must be coded in the root server's language.
-- Any update or new tool requires a full root server release.
-- Larger binary and higher resource usage.
-- May expose a large number of tools at once, which could bloat/confuse/delay LLMs or agents during initial tool selection, especially as the number of tools grows.
-
-This dynamic approach maximizes flexibility, scalability, and team autonomy, at the cost of slightly increased complexity and first-use latency, while also helping LLMs/agents focus on a relevant, manageable set of tools.
-
 ## Architecture & Flow (Sequence Diagram)
 
 The following sequence diagram illustrates the dynamic, on-demand nature of extension management and call dispatching:
@@ -107,3 +84,26 @@ sequenceDiagram
     Provider-->>AzureMCP: Result
     AzureMCP-->>User: Result
 ```
+
+## Design Tradeoffs: Dynamic Extensions vs. Monolithic Server
+
+This project uses a **dynamic extension model**: the root `mcp.azure` server discovers, installs, and starts provider MCP extensions on demand. This is in contrast to a **monolithic model** where all MCP tools are coded, shipped, and loaded in the root server.
+
+**Dynamic Extension Model (current):**
+
+- Extensions are developed, shipped, and updated independently.
+- New tools/extensions require no changes to the root server.
+- Only required extensions are loaded, reducing resource usage and startup time.
+- Enables teams to use any language or tech stack.
+- Slightly higher first-use latency due to extra roundtrips: discovery, possible install, and server startup before the first tool/command call. Subsequent calls are fast due to caching.
+- Keeps the tool surface minimal and relevant for LLMs/agents, reducing the risk of tool bloat, confusion, or delay during initial tool selection.
+
+**Monolithic Model (all tools in root):**
+
+- All tools are always available, with no install/start delay.
+- Simpler architecture, but all tools must be coded in the root server's language.
+- Any update or new tool requires a full root server release.
+- Larger binary and higher resource usage.
+- May expose a large number of tools at once, which could bloat/confuse/delay LLMs or agents during initial tool selection, especially as the number of tools grows.
+
+This dynamic approach maximizes flexibility, scalability, and team autonomy, at the cost of slightly increased complexity and first-use latency, while also helping LLMs/agents focus on a relevant, manageable set of tools.
