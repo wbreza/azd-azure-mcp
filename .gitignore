@@ -1,0 +1,45 @@
+# .gitignore for Azure MCP Go extensions and best practices
+
+# Binaries and build output
+/bin/
+**/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Go build cache and modules
+go.sum
+go.work
+*.out
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+vendor/
+
+# OS generated files
+*.DS_Store
+*.AppleDouble
+*.LSOverride
+
+# Test output
+*.coverprofile
+*.test
+
+# Local environment files
+.env
+.env.*
+
+# Ignore extension binaries
+mcp-*-windows-*.exe
+mcp-*-linux-*.exe
+mcp-*-darwin-*.exe
