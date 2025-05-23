@@ -21,6 +21,8 @@ type mcpExtensionMetadata struct {
 	Installed   bool   `json:"installed"`
 }
 
+var toolClientCache = make(map[string]client.MCPClient)
+
 func newServerCommand() *cobra.Command {
 	serverGroup := &cobra.Command{
 		Use: "server",
@@ -188,6 +190,10 @@ func newServerCommand() *cobra.Command {
 
 // Helper to get or start an MCP client for a tool, installing if needed
 func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.MCPClient, error) {
+	if cached, ok := toolClientCache[ext.ID]; ok {
+		return cached, nil
+	}
+
 	if !ext.Installed {
 		// Install the extension if not installed
 		installCmd := exec.Command("azd", "ext", "install", ext.ID)
@@ -196,6 +202,7 @@ func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.
 			return nil, fmt.Errorf("failed to install extension %s: %w\n%s", ext.ID, err, string(installOut))
 		}
 	}
+
 	// Use the namespace to build the server start command
 	nsParts := strings.Split(ext.Namespace, ".")
 	if len(nsParts) < 2 {
@@ -203,6 +210,7 @@ func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.
 	}
 	args := append([]string{}, nsParts...)
 	args = append(args, "server", "start")
+
 	mcpClient, err := client.NewStdioMCPClient("azd", nil, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start MCP client for %s: %w", ext.ID, err)
@@ -212,6 +220,7 @@ func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.
 		return nil, fmt.Errorf("failed to initialize MCP client for %s: %w", ext.ID, err)
 	}
 
+	toolClientCache[ext.ID] = mcpClient
 	return mcpClient, nil
 }
 
@@ -231,10 +240,12 @@ func loadMcpChildToolsMetadata(ctx context.Context) ([]mcp.Tool, []mcpExtensionM
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get extension metadata: %w\n%s", err, string(extOut))
 	}
+
 	var extList []mcpExtensionMetadata
 	if err := json.Unmarshal(extOut, &extList); err != nil {
 		return nil, nil, fmt.Errorf("failed to parse extension metadata: %w", err)
 	}
+
 	childTools := []mcp.Tool{}
 	for _, ext := range extList {
 		if ext.ID == "mcp.azure" {
@@ -246,5 +257,6 @@ func loadMcpChildToolsMetadata(ctx context.Context) ([]mcp.Tool, []mcpExtensionM
 		)
 		childTools = append(childTools, tool)
 	}
+
 	return childTools, extList, nil
 }
