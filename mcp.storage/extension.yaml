@@ -1,0 +1,12 @@
+capabilities:
+    - custom-commands
+description: Provides tools for interacting with Azure Storage accounts, containers, and blobs using the MCP protocol.
+displayName: Azure Storage Tool
+id: mcp.storage
+language: go
+namespace: mcp.storage
+tags:
+  - azure
+  - mcp
+usage: azd mcp.storage <command> [options]
+version: 0.0.1

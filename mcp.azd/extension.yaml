@@ -1,0 +1,15 @@
+id: mcp.azd
+namespace: mcp.azd
+displayName: Azure Developer CLI (azd) MCP Tool
+description: Provides tools for interacting with the Azure Developer CLI (azd)
+usage: azd mcp azd <command> [options]
+version: 0.0.1
+capabilities:
+  - custom-commands
+examples:
+  - name: start
+    description: Starts the `azd` MCP server.
+    usage: azd mcp azd server start
+tags:
+  - azure
+  - mcp

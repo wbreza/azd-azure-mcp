@@ -1,0 +1,12 @@
+capabilities:
+    - custom-commands
+description: Provides tools for interacting with Azure resources, subscriptions, and resource groups using the MCP protocol.
+displayName: Azure MCP Tool
+id: mcp.azure
+language: go
+namespace: mcp.azure
+tags:
+  - azure
+  - mcp
+usage: azd mcp.azure <command> [options]
+version: 0.0.1

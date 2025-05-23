@@ -1,0 +1,12 @@
+capabilities:
+    - custom-commands
+description: Provides tools for interacting with Azure Key Vaults and secrets using the MCP protocol.
+displayName: Azure KeyVault MCP Tool
+id: mcp.keyvault
+language: go
+namespace: mcp.keyvault
+tags:
+  - azure
+  - mcp
+usage: azd mcp.keyvault <command> [options]
+version: 0.0.1
