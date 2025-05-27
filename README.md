@@ -74,8 +74,25 @@ The "learn" pattern is a core feature for LLMs/agents and users to explore avail
 - Self-Describing: The system is fully self-describing, enabling agents to reason about and select tools programmatically.
 
 For example:
+
 - `learn: true` with no tool specified returns the top-level list of available tools (e.g., storage, keyvault, resource, azd, etc.).
 - `learn: true, tool: "storage"` returns the list of commands and parameters supported by the storage extension, using the same MCP tool schema.
+
+### Sampling
+
+Sampling is a powerful MCP feature that allows servers to request LLM completions through the client, enabling sophisticated agentic behaviors while maintaining security and privacy.
+
+How sampling works:
+
+1. Server sends a `sampling/createMessage` request to the client.
+2. Client reviews the request and can modify it.
+3. Client samples from an LLM.
+4. Client reviews the completion.
+5. Client returns the result to the server.
+
+This human-in-the-loop design ensures users maintain control over what the LLM sees and generates. (Note: This feature is not yet supported in all MCP clients.)
+
+Currently, sampling is not widely adopted across MCP implementations, but as support grows, the "learn" pattern and other agentic workflows may evolve to leverage sampling for even more powerful, secure, and interactive automation scenarios.
 
 This approach makes the system highly discoverable and agent-friendly, supporting robust, real-time, and iterative automation scenarios.
 
