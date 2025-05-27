@@ -122,20 +122,11 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The name of the container to list blobs for"),
 				),
-				mcp.WithString("resourceGroupName",
-					mcp.Required(),
-					mcp.Description("The name of the resource group containing the storage account"),
-				),
 			)
 
 			s.AddTool(listAccountsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				azCmd := exec.Command("az", "storage", "account", "list")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(createAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -168,11 +159,7 @@ func newServerCommand() *cobra.Command {
 					"--resource-group", group,
 					"--location", location,
 				)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(showAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -196,11 +183,7 @@ func newServerCommand() *cobra.Command {
 					"--name", name,
 					"--resource-group", group,
 				)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(listContainersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -213,11 +196,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "storage", "container", "list", "--account-name", name, "--auth-mode", "login")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(createContainerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -238,11 +217,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "storage", "container", "create", "--account-name", account, "--name", container, "--auth-mode", "login")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(deleteContainerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -263,11 +238,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "storage", "container", "delete", "--account-name", account, "--name", container, "--auth-mode", "login")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(deleteAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -288,11 +259,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "storage", "account", "delete", "--name", account, "--resource-group", group, "--yes")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			s.AddTool(listBlobsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -312,20 +279,8 @@ func newServerCommand() *cobra.Command {
 				if !ok {
 					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
 				}
-				groupArg, ok := request.GetArguments()["resourceGroupName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
-				}
-				group, ok := groupArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
-				}
-				azCmd := exec.Command("az", "storage", "blob", "list", "--account-name", account, "--container-name", container, "--resource-group", group, "--auth-mode", "login")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				azCmd := exec.Command("az", "storage", "blob", "list", "--account-name", account, "--container-name", container, "--auth-mode", "login")
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			fmt.Println("Starting Azure Storage MCP server...")
@@ -342,4 +297,13 @@ func newServerCommand() *cobra.Command {
 	serverGroup.AddCommand(startCmd)
 
 	return serverGroup
+}
+
+func runAzCommandWithResult(cmd *exec.Cmd) *mcp.CallToolResult {
+	output, err := cmd.CombinedOutput()
+	result := string(output)
+	if err != nil {
+		result = result + "\n[error] " + err.Error()
+	}
+	return mcp.NewToolResultText(result)
 }

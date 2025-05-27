@@ -11,6 +11,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func runAzCommandWithResult(cmd *exec.Cmd) *mcp.CallToolResult {
+	output, err := cmd.CombinedOutput()
+	result := string(output)
+	if err != nil {
+		result = result + "\n[error] " + err.Error()
+	}
+	return mcp.NewToolResultText(result)
+}
+
 func newServerCommand() *cobra.Command {
 	serverGroup := &cobra.Command{
 		Use: "server",
@@ -44,11 +53,7 @@ func newServerCommand() *cobra.Command {
 					}
 				}
 				azCmd := exec.Command("az", args...)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// create-keyvault
@@ -94,11 +99,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: location, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "create", "--name", name, "--resource-group", group, "--location", location)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// delete-keyvault
@@ -132,11 +133,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "delete", "--name", name, "--resource-group", group)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// list-secrets
@@ -158,11 +155,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: vaultName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "secret", "list", "--vault-name", vault)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// show-keyvault
@@ -196,11 +189,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "show", "--name", name, "--resource-group", group)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// show-keyvault-secret
@@ -234,11 +223,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: secretName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "secret", "show", "--vault-name", vault, "--name", secret)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// set-keyvault-secret
@@ -284,11 +269,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: value, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "secret", "set", "--vault-name", vault, "--name", secret, "--value", value)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// delete-keyvault-secret
@@ -322,11 +303,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: secretName, expected string"), nil
 				}
 				azCmd := exec.Command("az", "keyvault", "secret", "delete", "--vault-name", vault, "--name", secret)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// Start the server

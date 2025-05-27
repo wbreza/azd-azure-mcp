@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -14,11 +15,12 @@ import (
 )
 
 type mcpExtensionMetadata struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	Namespace   string `json:"namespace"`
-	Version     string `json:"version"`
-	Installed   bool   `json:"installed"`
+	ID            string `json:"id"`
+	Description   string `json:"description"`
+	Namespace     string `json:"namespace"`
+	Version       string `json:"version"`
+	LatestVersion string `json:"latestVersion"`
+	Installed     bool   `json:"installed"`
 }
 
 var toolClientCache = make(map[string]client.MCPClient)
@@ -194,7 +196,20 @@ func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.
 		return cached, nil
 	}
 
-	if !ext.Installed {
+	if ext.Installed {
+		// If installed, check for upgrade using semver
+		if ext.LatestVersion != ext.Version {
+			currentVer, currentVerErr := semver.NewVersion(ext.Version)
+			latestVer, latestVerErr := semver.NewVersion(ext.LatestVersion)
+			if currentVerErr == nil && latestVerErr == nil && latestVer.GreaterThan(currentVer) {
+				upgradeCmd := exec.Command("azd", "ext", "upgrade", ext.ID)
+				upgradeOut, err := upgradeCmd.CombinedOutput()
+				if err != nil {
+					return nil, fmt.Errorf("failed to upgrade extension %s: %w\n%s", ext.ID, err, string(upgradeOut))
+				}
+			}
+		}
+	} else {
 		// Install the extension if not installed
 		installCmd := exec.Command("azd", "ext", "install", ext.ID)
 		installOut, err := installCmd.CombinedOutput()

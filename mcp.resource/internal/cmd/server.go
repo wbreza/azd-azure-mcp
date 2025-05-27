@@ -34,11 +34,7 @@ func newServerCommand() *cobra.Command {
 			)
 			s.AddTool(listSubscriptionsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				azCmd := exec.Command("az", "account", "list")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// Resource group tools
@@ -60,11 +56,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
 				}
 				azCmd := exec.Command("az", "group", "list", "--subscription", subId)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			createResourceGroupTool := mcp.NewTool(
@@ -109,11 +101,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
 				}
 				azCmd := exec.Command("az", "group", "create", "--name", name, "--location", location, "--subscription", subId)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			showResourceGroupTool := mcp.NewTool(
@@ -146,11 +134,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
 				}
 				azCmd := exec.Command("az", "group", "show", "--name", name, "--subscription", subId)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			// Location tools
@@ -160,11 +144,7 @@ func newServerCommand() *cobra.Command {
 			)
 			s.AddTool(listLocationsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				azCmd := exec.Command("az", "account", "list-locations")
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			setDefaultSubscriptionTool := mcp.NewTool(
@@ -185,11 +165,7 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
 				}
 				azCmd := exec.Command("az", "account", "set", "--subscription", subId)
-				_, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText("Default subscription set successfully."), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			listResourcesTool := mcp.NewTool(
@@ -207,11 +183,7 @@ func newServerCommand() *cobra.Command {
 					}
 				}
 				azCmd := exec.Command("az", args...)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			listResourcesByTypeTool := mcp.NewTool(
@@ -250,11 +222,7 @@ func newServerCommand() *cobra.Command {
 					}
 				}
 				azCmd := exec.Command("az", args...)
-				output, err := azCmd.CombinedOutput()
-				if err != nil {
-					return mcp.NewToolResultText(err.Error()), nil
-				}
-				return mcp.NewToolResultText(string(output)), nil
+				return runAzCommandWithResult(azCmd), nil
 			})
 
 			fmt.Println("Starting Azure Metadata MCP server...")
@@ -271,4 +239,13 @@ func newServerCommand() *cobra.Command {
 	serverGroup.AddCommand(startCmd)
 
 	return serverGroup
+}
+
+func runAzCommandWithResult(cmd *exec.Cmd) *mcp.CallToolResult {
+	output, err := cmd.CombinedOutput()
+	result := string(output)
+	if err != nil {
+		result = result + "\n[error] " + err.Error()
+	}
+	return mcp.NewToolResultText(result)
 }
