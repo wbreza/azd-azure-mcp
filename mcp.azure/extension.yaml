@@ -4,9 +4,9 @@ description: Provides tools for interacting with Azure resources, subscriptions,
 displayName: Azure MCP Tool
 id: mcp.azure
 language: go
-namespace: mcp.azure
+namespace: mcp.azure.root
 tags:
   - azure
   - mcp
-usage: azd mcp.azure <command> [options]
+usage: azd mcp azure root <command> [options]
 version: 0.0.1

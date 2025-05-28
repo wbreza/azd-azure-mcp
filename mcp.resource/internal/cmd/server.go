@@ -27,16 +27,6 @@ func newServerCommand() *cobra.Command {
 				server.WithInstructions("Supports tools for interacting with Azure subscriptions, resource groups and generic resources."),
 			)
 
-			// Subscription tools
-			listSubscriptionsTool := mcp.NewTool(
-				"list-subscriptions",
-				mcp.WithDescription("Lists all Azure subscriptions accessible to the account"),
-			)
-			s.AddTool(listSubscriptionsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				azCmd := exec.Command("az", "account", "list")
-				return runAzCommandWithResult(azCmd), nil
-			})
-
 			// Resource group tools
 			listResourceGroupsTool := mcp.NewTool(
 				"list-resource-groups",
@@ -137,37 +127,6 @@ func newServerCommand() *cobra.Command {
 				return runAzCommandWithResult(azCmd), nil
 			})
 
-			// Location tools
-			listLocationsTool := mcp.NewTool(
-				"list-locations",
-				mcp.WithDescription("Lists all Azure locations available for the current account"),
-			)
-			s.AddTool(listLocationsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				azCmd := exec.Command("az", "account", "list-locations")
-				return runAzCommandWithResult(azCmd), nil
-			})
-
-			setDefaultSubscriptionTool := mcp.NewTool(
-				"set-default-subscription",
-				mcp.WithDescription("Sets the specified Azure subscription as the default for subsequent Azure CLI operations"),
-				mcp.WithString("subscriptionId",
-					mcp.Required(),
-					mcp.Description("The Azure subscription ID to set as default"),
-				),
-			)
-			s.AddTool(setDefaultSubscriptionTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				subIdArg, ok := request.GetArguments()["subscriptionId"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: subscriptionId"), nil
-				}
-				subId, ok := subIdArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
-				}
-				azCmd := exec.Command("az", "account", "set", "--subscription", subId)
-				return runAzCommandWithResult(azCmd), nil
-			})
-
 			listResourcesTool := mcp.NewTool(
 				"list-resources",
 				mcp.WithDescription("Lists all resources in a specific Azure resource group or all resources if no group is specified"),
@@ -225,7 +184,75 @@ func newServerCommand() *cobra.Command {
 				return runAzCommandWithResult(azCmd), nil
 			})
 
-			fmt.Println("Starting Azure Metadata MCP server...")
+			// Delete resource group tool
+
+			deleteResourceGroupTool := mcp.NewTool(
+				"delete-resource-group",
+				mcp.WithDescription("Deletes a specific Azure resource group."),
+				mcp.WithString("resourceGroupName",
+					mcp.Required(),
+					mcp.Description("The name of the resource group to delete"),
+				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The subscription ID containing the resource group"),
+				),
+			)
+			s.AddTool(deleteResourceGroupTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				nameArg, ok := request.GetArguments()["resourceGroupName"]
+				if !ok {
+					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
+				}
+				name, ok := nameArg.(string)
+				if !ok {
+					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
+				}
+				subIdArg, ok := request.GetArguments()["subscriptionId"]
+				if !ok {
+					return mcp.NewToolResultText("Missing required argument: subscriptionId"), nil
+				}
+				subId, ok := subIdArg.(string)
+				if !ok {
+					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
+				}
+				azCmd := exec.Command("az", "group", "delete", "--name", name, "--subscription", subId, "--yes")
+				return runAzCommandWithResult(azCmd), nil
+			})
+
+			// Exists resource group tool
+
+			existsResourceGroupTool := mcp.NewTool(
+				"exists-resource-group",
+				mcp.WithDescription("Checks if a specific Azure resource group exists."),
+				mcp.WithString("resourceGroupName",
+					mcp.Required(),
+					mcp.Description("The name of the resource group to check"),
+				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The subscription ID containing the resource group"),
+				),
+			)
+			s.AddTool(existsResourceGroupTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				nameArg, ok := request.GetArguments()["resourceGroupName"]
+				if !ok {
+					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
+				}
+				name, ok := nameArg.(string)
+				if !ok {
+					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
+				}
+				subIdArg, ok := request.GetArguments()["subscriptionId"]
+				if !ok {
+					return mcp.NewToolResultText("Missing required argument: subscriptionId"), nil
+				}
+				subId, ok := subIdArg.(string)
+				if !ok {
+					return mcp.NewToolResultText("Invalid type for argument: subscriptionId, expected string"), nil
+				}
+				azCmd := exec.Command("az", "group", "exists", "--name", name, "--subscription", subId)
+				return runAzCommandWithResult(azCmd), nil
+			})
 
 			// Start the server
 			if err := server.ServeStdio(s); err != nil {

@@ -8,5 +8,5 @@ namespace: mcp.keyvault
 tags:
   - azure
   - mcp
-usage: azd mcp.keyvault <command> [options]
+usage: azd mcp keyvault <command> [options]
 version: 0.0.1

@@ -124,6 +124,24 @@ func newServerCommand() *cobra.Command {
 				),
 			)
 
+			uploadBlobTool := mcp.NewTool(
+				"upload-blob",
+				mcp.WithDescription("Uploads a blob to a container in a storage account."),
+				mcp.WithString("storageAccountName", mcp.Required(), mcp.Description("The name of the storage account.")),
+				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
+				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to upload.")),
+				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to create in the container.")),
+			)
+
+			downloadBlobTool := mcp.NewTool(
+				"download-blob",
+				mcp.WithDescription("Downloads a blob from a container in a storage account."),
+				mcp.WithString("storageAccountName", mcp.Required(), mcp.Description("The name of the storage account.")),
+				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
+				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to download.")),
+				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to save the blob to.")),
+			)
+
 			s.AddTool(listAccountsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				azCmd := exec.Command("az", "storage", "account", "list")
 				return runAzCommandWithResult(azCmd), nil
@@ -283,7 +301,23 @@ func newServerCommand() *cobra.Command {
 				return runAzCommandWithResult(azCmd), nil
 			})
 
-			fmt.Println("Starting Azure Storage MCP server...")
+			s.AddTool(uploadBlobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				account, _ := request.GetArguments()["storageAccountName"].(string)
+				container, _ := request.GetArguments()["containerName"].(string)
+				filePath, _ := request.GetArguments()["filePath"].(string)
+				blobName, _ := request.GetArguments()["blobName"].(string)
+				azCmd := exec.Command("az", "storage", "blob", "upload", "--account-name", account, "--container-name", container, "--file", filePath, "--name", blobName, "--auth-mode", "login")
+				return runAzCommandWithResult(azCmd), nil
+			})
+
+			s.AddTool(downloadBlobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				account, _ := request.GetArguments()["storageAccountName"].(string)
+				container, _ := request.GetArguments()["containerName"].(string)
+				blobName, _ := request.GetArguments()["blobName"].(string)
+				filePath, _ := request.GetArguments()["filePath"].(string)
+				azCmd := exec.Command("az", "storage", "blob", "download", "--account-name", account, "--container-name", container, "--name", blobName, "--file", filePath, "--auth-mode", "login")
+				return runAzCommandWithResult(azCmd), nil
+			})
 
 			// Start the server
 			if err := server.ServeStdio(s); err != nil {

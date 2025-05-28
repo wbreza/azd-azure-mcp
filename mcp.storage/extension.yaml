@@ -8,5 +8,5 @@ namespace: mcp.storage
 tags:
   - azure
   - mcp
-usage: azd mcp.storage <command> [options]
+usage: azd mcp storage <command> [options]
 version: 0.0.1

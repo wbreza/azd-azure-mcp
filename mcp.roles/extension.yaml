@@ -1,0 +1,12 @@
+capabilities:
+    - custom-commands
+description: Provides automation and tools for listing, creating, and deleting Azure role assignments, as well as managing custom and built-in role definitions against Azure resources.
+displayName: Azure Role Assignments MCP Tool
+id: mcp.roles
+language: go
+namespace: mcp.azure.roles
+tags:
+  - azure
+  - mcp
+usage: azd mcp azure roles <command> [options]
+version: 0.0.1

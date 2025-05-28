@@ -174,8 +174,6 @@ func newServerCommand() *cobra.Command {
 				return toolCallResult, nil
 			})
 
-			fmt.Println("Starting Azure MCP server...")
-
 			// Start the server
 			if err := server.ServeStdio(s); err != nil {
 				fmt.Printf("Server error: %v\n", err)

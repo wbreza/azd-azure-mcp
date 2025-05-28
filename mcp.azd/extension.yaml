@@ -1,7 +1,7 @@
 id: mcp.azd
 namespace: mcp.azd
 displayName: Azure Developer CLI (azd) MCP Tool
-description: Provides tools for interacting with the Azure Developer CLI (azd)
+description: Provides tools for automating and managing Azure Developer CLI (azd) commands and workflows using the MCP protocol.
 usage: azd mcp azd <command> [options]
 version: 0.0.1
 capabilities:

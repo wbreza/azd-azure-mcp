@@ -36,8 +36,6 @@ func newServerCommand() *cobra.Command {
 
 			registerTools(mcpServer)
 
-			log.Println("Starting MCP server...")
-
 			if err := server.ServeStdio(mcpServer); err != nil {
 				return err
 			}
@@ -224,6 +222,19 @@ func registerTools(s *server.MCPServer) {
 		mcp.WithString("payload", mcp.Description("The JSON payload of the collected questions and answers.")),
 	)
 
+	selectEnvTool := mcp.NewTool("select-environment",
+		mcp.WithDescription("Selects the default azd environment for the current project."),
+		mcp.WithString("environment",
+			mcp.Required(),
+			mcp.Description("The name of the azd environment to select as default."),
+		),
+		mcp.WithString("cwd",
+			mcp.Description("The azd project directory"),
+			mcp.Required(),
+			mcp.DefaultString("."),
+		),
+	)
+
 	s.AddTool(initTool, invokeInit)
 	s.AddTool(showTool, invokeShow)
 	s.AddTool(provisionTool, invokeProvision)
@@ -239,6 +250,7 @@ func registerTools(s *server.MCPServer) {
 	s.AddTool(pipelineConfigTool, invokePipelineConfig)
 	s.AddTool(upTool, invokeUp)
 	s.AddTool(aiBuilderTool, invokeAiBuilder)
+	s.AddTool(selectEnvTool, invokeSelectEnv)
 }
 
 type location struct {
@@ -533,6 +545,15 @@ func invokePipelineConfig(ctx context.Context, request mcp.CallToolRequest) (*mc
 
 func invokeUp(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	args := []string{"up"}
+	return execAzdCommand(request, args)
+}
+
+func invokeSelectEnv(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := []string{"env", "select"}
+	env, hasEnv := request.GetArguments()["environment"]
+	if hasEnv {
+		args = append(args, env.(string))
+	}
 	return execAzdCommand(request, args)
 }
 

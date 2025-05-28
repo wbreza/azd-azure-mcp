@@ -1,0 +1,12 @@
+capabilities:
+    - custom-commands
+description: Provides automation for retrieving information about the Azure account, listing subscriptions and locations, and setting the default subscription for the current logged in user.
+displayName: Azure Account MCP Tool
+id: mcp.account
+language: go
+namespace: mcp.azure.account
+tags:
+  - azure
+  - mcp
+usage: azd mcp azure account <command> [options]
+version: 0.0.1
