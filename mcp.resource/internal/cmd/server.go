@@ -21,9 +21,11 @@ func newServerCommand() *cobra.Command {
 			s := server.NewMCPServer(
 				"Azure Resources",
 				"1.0.0",
-				server.WithToolCapabilities(false),
+				server.WithToolCapabilities(true),
 				server.WithRecovery(),
 				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions("Supports tools for interacting with Azure subscriptions, resource groups and generic resources."),
 			)
 

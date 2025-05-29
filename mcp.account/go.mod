@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/fatih/color v1.18.0
-	github.com/mark3labs/mcp-go v0.30.0
+	github.com/mark3labs/mcp-go v0.30.1
 	github.com/spf13/cobra v1.9.1
 )
 

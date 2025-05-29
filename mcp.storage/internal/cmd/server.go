@@ -2,9 +2,16 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"os/exec"
+	"io"
+	"os"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/storage/armstorage"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -21,9 +28,11 @@ func newServerCommand() *cobra.Command {
 			s := server.NewMCPServer(
 				"Storage",
 				"1.0.0",
-				server.WithToolCapabilities(false),
+				server.WithToolCapabilities(true),
 				server.WithRecovery(),
 				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions("Supports tools interactions with Azure Storage accounts, containers and blobs."),
 			)
 
@@ -142,186 +151,350 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to save the blob to.")),
 			)
 
+			// Storage Account Tools
+
+			// List Storage Accounts
 			s.AddTool(listAccountsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				azCmd := exec.Command("az", "storage", "account", "list")
-				return runAzCommandWithResult(azCmd), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
+				}
+				subId, err := getRequiredStringArg(request.GetArguments(), "subscriptionId")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				client, err := armstorage.NewAccountsClient(subId, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create storage accounts client: " + err.Error()), nil
+				}
+				pager := client.NewListPager(nil)
+				var accounts []*armstorage.Account
+				for pager.More() {
+					page, err := pager.NextPage(ctx)
+					if err != nil {
+						return mcp.NewToolResultText("Failed to list storage accounts: " + err.Error()), nil
+					}
+					accounts = append(accounts, page.Value...)
+				}
+				result, _ := json.MarshalIndent(accounts, "", "  ")
+				return mcp.NewToolResultText(string(result)), nil
 			})
 
+			// Create Storage Account
 			s.AddTool(createAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				nameArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				name, ok := nameArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				name, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				groupArg, ok := request.GetArguments()["resourceGroupName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
+				group, err := getRequiredStringArg(request.GetArguments(), "resourceGroupName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				group, ok := groupArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
+				location, err := getRequiredStringArg(request.GetArguments(), "location")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				locationArg, ok := request.GetArguments()["location"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: location"), nil
+				subId, err := getRequiredStringArg(request.GetArguments(), "subscriptionId")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				location, ok := locationArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: location, expected string"), nil
+				client, err := armstorage.NewAccountsClient(subId, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create storage accounts client: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "account", "create",
-					"--name", name,
-					"--resource-group", group,
-					"--location", location,
-				)
-				return runAzCommandWithResult(azCmd), nil
+				poller, err := client.BeginCreate(ctx, group, name, armstorage.AccountCreateParameters{
+					Location: to.Ptr(location),
+					Kind:     to.Ptr(armstorage.KindStorageV2),
+					SKU:      &armstorage.SKU{Name: to.Ptr(armstorage.SKUNameStandardLRS)},
+				}, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to start storage account creation: " + err.Error()), nil
+				}
+				resp, err := poller.PollUntilDone(ctx, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create storage account: " + err.Error()), nil
+				}
+				result, _ := json.MarshalIndent(resp.Account, "", "  ")
+				return mcp.NewToolResultText(string(result)), nil
 			})
 
+			// Show Storage Account
+			// Migrated from Azure CLI to Azure SDK for Go
 			s.AddTool(showAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				nameArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				name, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				name, ok := nameArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				group, err := getRequiredStringArg(request.GetArguments(), "resourceGroupName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				groupArg, ok := request.GetArguments()["resourceGroupName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
+				subId, err := getRequiredStringArg(request.GetArguments(), "subscriptionId")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				group, ok := groupArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "account", "show",
-					"--name", name,
-					"--resource-group", group,
-				)
-				return runAzCommandWithResult(azCmd), nil
+				client, err := armstorage.NewAccountsClient(subId, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create storage accounts client: " + err.Error()), nil
+				}
+				resp, err := client.GetProperties(ctx, group, name, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get storage account details: " + err.Error()), nil
+				}
+				result, _ := json.MarshalIndent(resp.Account, "", "  ")
+				return mcp.NewToolResultText(string(result)), nil
 			})
 
+			// List Containers (SDK)
 			s.AddTool(listContainersTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				nameArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				name, ok := nameArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "container", "list", "--account-name", name, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
+				}
+				pager := client.NewListContainersPager(nil)
+				var containers []interface{}
+				for pager.More() {
+					page, err := pager.NextPage(ctx)
+					if err != nil {
+						return mcp.NewToolResultText("Failed to list containers: " + err.Error()), nil
+					}
+					if page.ContainerItems != nil {
+						for _, c := range page.ContainerItems {
+							containers = append(containers, c)
+						}
+					} else {
+						containers = append(containers, page)
+					}
+				}
+				result, _ := json.MarshalIndent(containers, "", "  ")
+				return mcp.NewToolResultText(string(result)), nil
 			})
 
+			// Create Container (SDK)
 			s.AddTool(createContainerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				accountArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				account, ok := accountArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				containerArg, ok := request.GetArguments()["containerName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: containerName"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				container, ok := containerArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "container", "create", "--account-name", account, "--name", container, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				_, err = client.CreateContainer(ctx, container, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create container: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Container '%s' created successfully.", container)), nil
 			})
 
+			// Delete Container (SDK)
 			s.AddTool(deleteContainerTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				accountArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				account, ok := accountArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				containerArg, ok := request.GetArguments()["containerName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: containerName"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				container, ok := containerArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "container", "delete", "--account-name", account, "--name", container, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				_, err = client.DeleteContainer(ctx, container, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to delete container: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Container '%s' deleted successfully.", container)), nil
 			})
 
+			// Delete Storage Account (SDK)
+			// Migrated from Azure CLI to Azure SDK for Go
 			s.AddTool(deleteAccountTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				accountArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				account, ok := accountArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				group, err := getRequiredStringArg(request.GetArguments(), "resourceGroupName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				groupArg, ok := request.GetArguments()["resourceGroupName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: resourceGroupName"), nil
+				subId, err := getRequiredStringArg(request.GetArguments(), "subscriptionId")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				group, ok := groupArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: resourceGroupName, expected string"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "account", "delete", "--name", account, "--resource-group", group, "--yes")
-				return runAzCommandWithResult(azCmd), nil
+				client, err := armstorage.NewAccountsClient(subId, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create storage accounts client: " + err.Error()), nil
+				}
+				_, err = client.Delete(ctx, group, account, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to start storage account deletion: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Storage account '%s' deleted successfully from resource group '%s'.", account, group)), nil
 			})
 
+			// List Blobs (SDK)
 			s.AddTool(listBlobsTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				accountArg, ok := request.GetArguments()["storageAccountName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: storageAccountName"), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				account, ok := accountArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: storageAccountName, expected string"), nil
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
 				}
-				containerArg, ok := request.GetArguments()["containerName"]
-				if !ok {
-					return mcp.NewToolResultText("Missing required argument: containerName"), nil
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
 				}
-				container, ok := containerArg.(string)
-				if !ok {
-					return mcp.NewToolResultText("Invalid type for argument: containerName, expected string"), nil
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
 				}
-				azCmd := exec.Command("az", "storage", "blob", "list", "--account-name", account, "--container-name", container, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				pager := client.NewListBlobsFlatPager(container, nil)
+				var blobs []interface{}
+				for pager.More() {
+					page, err := pager.NextPage(ctx)
+					if err != nil {
+						return mcp.NewToolResultText("Failed to list blobs: " + err.Error()), nil
+					}
+					if page.Segment != nil && page.Segment.BlobItems != nil {
+						for _, b := range page.Segment.BlobItems {
+							blobs = append(blobs, b)
+						}
+					} else {
+						blobs = append(blobs, page)
+					}
+				}
+				result, _ := json.MarshalIndent(blobs, "", "  ")
+				return mcp.NewToolResultText(string(result)), nil
 			})
 
+			// Upload Blob (SDK)
 			s.AddTool(uploadBlobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				account, _ := request.GetArguments()["storageAccountName"].(string)
-				container, _ := request.GetArguments()["containerName"].(string)
-				filePath, _ := request.GetArguments()["filePath"].(string)
-				blobName, _ := request.GetArguments()["blobName"].(string)
-				azCmd := exec.Command("az", "storage", "blob", "upload", "--account-name", account, "--container-name", container, "--file", filePath, "--name", blobName, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				filePath, err := getRequiredStringArg(request.GetArguments(), "filePath")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				blobName, err := getRequiredStringArg(request.GetArguments(), "blobName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
+				}
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
+				}
+				file, err := os.Open(filePath)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to open file: " + err.Error()), nil
+				}
+				defer file.Close()
+				_, err = client.UploadStream(ctx, container, blobName, file, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to upload blob: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' uploaded successfully to container '%s'.", blobName, container)), nil
 			})
 
+			// Download Blob (SDK)
 			s.AddTool(downloadBlobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				account, _ := request.GetArguments()["storageAccountName"].(string)
-				container, _ := request.GetArguments()["containerName"].(string)
-				blobName, _ := request.GetArguments()["blobName"].(string)
-				filePath, _ := request.GetArguments()["filePath"].(string)
-				azCmd := exec.Command("az", "storage", "blob", "download", "--account-name", account, "--container-name", container, "--name", blobName, "--file", filePath, "--auth-mode", "login")
-				return runAzCommandWithResult(azCmd), nil
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				blobName, err := getRequiredStringArg(request.GetArguments(), "blobName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				filePath, err := getRequiredStringArg(request.GetArguments(), "filePath")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
+				}
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
+				}
+				resp, err := client.DownloadStream(ctx, container, blobName, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to download blob: " + err.Error()), nil
+				}
+				file, err := os.Create(filePath)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create file: " + err.Error()), nil
+				}
+				defer file.Close()
+				_, err = io.Copy(file, resp.Body)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to write blob to file: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' downloaded successfully to '%s'.", blobName, filePath)), nil
 			})
 
-			// Start the server
-			if err := server.ServeStdio(s); err != nil {
-				fmt.Printf("Server error: %v\n", err)
+			// Start the HTTP server on http://localhost:8080/mcp
+			sseServer := server.NewStreamableHTTPServer(s,
+				server.WithEndpointPath("/storage/mcp"),
+			)
+			if err := sseServer.Start("localhost:8081"); err != nil {
+				return fmt.Errorf("Failed to start SSE server: %v", err)
 			}
 
 			return nil
@@ -333,11 +506,26 @@ func newServerCommand() *cobra.Command {
 	return serverGroup
 }
 
-func runAzCommandWithResult(cmd *exec.Cmd) *mcp.CallToolResult {
-	output, err := cmd.CombinedOutput()
-	result := string(output)
-	if err != nil {
-		result = result + "\n[error] " + err.Error()
+// Helper to get a DefaultAzureCredential as azcore.TokenCredential
+func getCredential() (azcore.TokenCredential, error) {
+	// For POC - this is just using DefaultAzureCredential since we can run this locally and still get a credential
+	// In reality when running in Azure we would need to leverage proper OAuth flow
+	// https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization
+	return azidentity.NewDefaultAzureCredential(nil)
+}
+
+// Helper to extract and validate a required string argument
+func getRequiredStringArg(args map[string]interface{}, key string) (string, error) {
+	val, ok := args[key]
+	if !ok {
+		return "", fmt.Errorf("Missing required argument: %s", key)
 	}
-	return mcp.NewToolResultText(result)
+	str, ok := val.(string)
+	if !ok {
+		return "", fmt.Errorf("Invalid type for argument: %s, expected string", key)
+	}
+	if str == "" {
+		return "", fmt.Errorf("Argument '%s' cannot be empty", key)
+	}
+	return str, nil
 }

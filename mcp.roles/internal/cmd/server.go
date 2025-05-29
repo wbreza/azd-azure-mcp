@@ -21,9 +21,11 @@ func newServerCommand() *cobra.Command {
 			s := server.NewMCPServer(
 				"Azure Role Assignments",
 				"1.0.0",
-				server.WithToolCapabilities(false),
+				server.WithToolCapabilities(true),
 				server.WithRecovery(),
 				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions("Supports tool automation for Azure role assignments, including listing, creating, and deleting role assignments and definitions."),
 			)
 

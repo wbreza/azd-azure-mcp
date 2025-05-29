@@ -6,7 +6,6 @@ id: mcp.storage
 language: go
 namespace: mcp.storage
 tags:
-  - azure
-  - mcp
+  - remote
 usage: azd mcp storage <command> [options]
 version: 0.0.1

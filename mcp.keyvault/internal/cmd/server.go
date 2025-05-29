@@ -31,9 +31,11 @@ func newServerCommand() *cobra.Command {
 			s := server.NewMCPServer(
 				"KeyVault",
 				"1.0.0",
-				server.WithToolCapabilities(false),
+				server.WithToolCapabilities(true),
 				server.WithRecovery(),
 				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions("Supports tools for interacting with Azure Key Vaults and secrets."),
 			)
 

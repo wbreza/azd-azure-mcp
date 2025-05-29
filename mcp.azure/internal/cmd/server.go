@@ -4,26 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"strings"
 
-	"github.com/Masterminds/semver/v3"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
+
+	"mcp.azure/internal/metadata"
 )
 
-type mcpExtensionMetadata struct {
-	ID            string `json:"id"`
-	Description   string `json:"description"`
-	Namespace     string `json:"namespace"`
-	Version       string `json:"version"`
-	LatestVersion string `json:"latestVersion"`
-	Installed     bool   `json:"installed"`
-}
-
-var toolClientCache = make(map[string]client.MCPClient)
+// Update toolClientCache to use map[string]*client.Client
+var toolClientCache = make(map[string]*client.Client)
 
 func newServerCommand() *cobra.Command {
 	serverGroup := &cobra.Command{
@@ -37,9 +28,11 @@ func newServerCommand() *cobra.Command {
 			s := server.NewMCPServer(
 				"Azure",
 				"1.0.0",
-				server.WithToolCapabilities(false),
+				server.WithToolCapabilities(true),
 				server.WithRecovery(),
 				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions(`
 					This server/tool provides real-time, programmatic access to all Azure products, services, and resources,
 					as well as all interactions with the Azure Developer CLI (azd).
@@ -51,9 +44,26 @@ func newServerCommand() *cobra.Command {
 				`),
 			)
 
-			childTools, extList, err := loadMcpChildToolsMetadata(ctx)
+			// Load all tool metadata at startup
+			azdTools, err := metadata.LoadAzdToolMetadata(ctx)
 			if err != nil {
 				return err
+			}
+
+			externalTools, err := metadata.LoadExternalToolMetadata(ctx)
+			if err != nil {
+				return err
+			}
+
+			allTools := append(azdTools, externalTools...)
+
+			// Build []mcp.Tool for server registration and a map for fast lookup
+			var childTools []mcp.Tool
+			toolMetadataMap := make(map[string]metadata.ToolMetadata)
+			for _, t := range allTools {
+				meta := t.Metadata()
+				childTools = append(childTools, meta)
+				toolMetadataMap[meta.Name] = t
 			}
 
 			azureTool := mcp.NewTool(
@@ -92,29 +102,35 @@ func newServerCommand() *cobra.Command {
 				learn, ok := request.GetArguments()["learn"].(bool)
 				if ok && learn {
 					if hasToolName && toolName != "" {
-						ext := findExtensionByToolName(extList, toolName)
-						if ext == nil {
+						tm, ok := toolMetadataMap[toolName]
+						if !ok {
 							return mcp.NewToolResultText(fmt.Sprintf(`
 								Tool %s not found
 								Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
 							`, toolName)), nil
 						}
 
-						toolClient, err := getOrStartMcpClient(ctx, *ext)
-						if err != nil {
-							return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
+						// Caching at caller side
+						cacheKey := toolName
+						toolClient, ok := toolClientCache[cacheKey]
+						if !ok {
+							var err error
+							toolClient, err = tm.CreateClient(ctx)
+							if err != nil {
+								return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
+							}
+
+							toolClientCache[cacheKey] = toolClient
 						}
 
 						childTools, err := toolClient.ListTools(ctx, mcp.ListToolsRequest{})
 						if err != nil {
 							return nil, fmt.Errorf("failed to get child tools: %w", err)
 						}
-
 						toolsJson, err := json.MarshalIndent(childTools, "", "  ")
 						if err != nil {
 							return nil, fmt.Errorf("failed get get learn content: %w", err)
 						}
-
 						learnContent := fmt.Sprintf(`
 							Here are the available command and their parameters for '%s' tool.
 							If you do not find a suitable tool, run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
@@ -134,7 +150,6 @@ func newServerCommand() *cobra.Command {
 				}
 
 				commandName, hasCommandName := request.GetArguments()["command"].(string)
-
 				if !hasToolName || !hasCommandName {
 					return mcp.NewToolResultText(`
 						The "tool" and "command" parameters are required when not learning
@@ -142,25 +157,30 @@ func newServerCommand() *cobra.Command {
 						To learn about a specific tool, use the "tool" argument with the name of the tool.
 					`), nil
 				}
-
-				ext := findExtensionByToolName(extList, toolName)
-				if ext == nil {
+				tm, ok := toolMetadataMap[toolName]
+				if !ok {
 					return mcp.NewToolResultText(fmt.Sprintf(`
 						Tool %s not found
 						Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
 					`, toolName)), nil
 				}
 
-				toolClient, err := getOrStartMcpClient(ctx, *ext)
-				if err != nil {
-					return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
+				cacheKey := toolName
+				toolClient, ok := toolClientCache[cacheKey]
+				if !ok {
+					var err error
+					toolClient, err = tm.CreateClient(ctx)
+					if err != nil {
+						return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
+					}
+					toolClientCache[cacheKey] = toolClient
 				}
 
-				// Transform the incoming "parameters" argument into a properly formatted CallToolRequest for the child tool
 				params := request.GetArguments()["parameters"]
 				childRequest := request
 				childRequest.Params.Name = commandName
 				childRequest.Params.Arguments = params
+
 				toolCallResult, err := toolClient.CallTool(ctx, childRequest)
 				if err != nil {
 					return mcp.NewToolResultText(fmt.Sprintf(`
@@ -170,7 +190,6 @@ func newServerCommand() *cobra.Command {
 						Run again with the "learn" argument and the "tool" name to get a list of available tools and their parameters.
 					`, toolName, commandName, err)), nil
 				}
-
 				return toolCallResult, nil
 			})
 
@@ -186,90 +205,4 @@ func newServerCommand() *cobra.Command {
 	serverGroup.AddCommand(startCmd)
 
 	return serverGroup
-}
-
-// Helper to get or start an MCP client for a tool, installing if needed
-func getOrStartMcpClient(ctx context.Context, ext mcpExtensionMetadata) (client.MCPClient, error) {
-	if cached, ok := toolClientCache[ext.ID]; ok {
-		return cached, nil
-	}
-
-	if ext.Installed {
-		// If installed, check for upgrade using semver
-		if ext.LatestVersion != ext.Version {
-			currentVer, currentVerErr := semver.NewVersion(ext.Version)
-			latestVer, latestVerErr := semver.NewVersion(ext.LatestVersion)
-			if currentVerErr == nil && latestVerErr == nil && latestVer.GreaterThan(currentVer) {
-				upgradeCmd := exec.Command("azd", "ext", "upgrade", ext.ID)
-				upgradeOut, err := upgradeCmd.CombinedOutput()
-				if err != nil {
-					return nil, fmt.Errorf("failed to upgrade extension %s: %w\n%s", ext.ID, err, string(upgradeOut))
-				}
-			}
-		}
-	} else {
-		// Install the extension if not installed
-		installCmd := exec.Command("azd", "ext", "install", ext.ID)
-		installOut, err := installCmd.CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("failed to install extension %s: %w\n%s", ext.ID, err, string(installOut))
-		}
-	}
-
-	// Use the namespace to build the server start command
-	nsParts := strings.Split(ext.Namespace, ".")
-	if len(nsParts) < 2 {
-		return nil, fmt.Errorf("invalid namespace for extension: %s", ext.Namespace)
-	}
-	args := append([]string{}, nsParts...)
-	args = append(args, "server", "start")
-
-	mcpClient, err := client.NewStdioMCPClient("azd", nil, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start MCP client for %s: %w", ext.ID, err)
-	}
-
-	if _, err := mcpClient.Initialize(ctx, mcp.InitializeRequest{}); err != nil {
-		return nil, fmt.Errorf("failed to initialize MCP client for %s: %w", ext.ID, err)
-	}
-
-	toolClientCache[ext.ID] = mcpClient
-	return mcpClient, nil
-}
-
-// Helper to find extension metadata by tool name
-func findExtensionByToolName(extList []mcpExtensionMetadata, toolName string) *mcpExtensionMetadata {
-	for i := range extList {
-		if extList[i].ID == "mcp."+toolName {
-			return &extList[i]
-		}
-	}
-	return nil
-}
-
-func loadMcpChildToolsMetadata(ctx context.Context) ([]mcp.Tool, []mcpExtensionMetadata, error) {
-	extCmd := exec.Command("azd", "ext", "list", "--tags", "azure,mcp", "--output", "json")
-	extOut, err := extCmd.CombinedOutput()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get extension metadata: %w\n%s", err, string(extOut))
-	}
-
-	var extList []mcpExtensionMetadata
-	if err := json.Unmarshal(extOut, &extList); err != nil {
-		return nil, nil, fmt.Errorf("failed to parse extension metadata: %w", err)
-	}
-
-	childTools := []mcp.Tool{}
-	for _, ext := range extList {
-		if ext.ID == "mcp.azure" {
-			continue // skip self
-		}
-		toolName := ext.ID[len("mcp."):]
-		tool := mcp.NewTool(toolName,
-			mcp.WithDescription(ext.Description),
-		)
-		childTools = append(childTools, tool)
-	}
-
-	return childTools, extList, nil
 }

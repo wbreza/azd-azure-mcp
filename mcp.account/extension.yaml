@@ -4,9 +4,9 @@ description: Provides automation for retrieving information about the Azure acco
 displayName: Azure Account MCP Tool
 id: mcp.account
 language: go
-namespace: mcp.azure.account
+namespace: mcp.account
 tags:
   - azure
   - mcp
-usage: azd mcp azure account <command> [options]
+usage: azd mcp account <command> [options]
 version: 0.0.1

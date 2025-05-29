@@ -27,11 +27,15 @@ func newServerCommand() *cobra.Command {
 		Short: "Get the context of the AZD project & environment.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			mcpServer := server.NewMCPServer("azd", "0.0.1",
+				server.WithToolCapabilities(true),
+				server.WithRecovery(),
+				server.WithLogging(),
+				server.WithPromptCapabilities(false),
+				server.WithResourceCapabilities(false, false),
 				server.WithInstructions(
 					"Provides tools to dynamically run the AZD (Azure Developer CLI) commands. "+
 						"If a tool accepts a 'cwd', send the current working directory as the 'cwd' argument.",
 				),
-				server.WithLogging(),
 			)
 
 			registerTools(mcpServer)
