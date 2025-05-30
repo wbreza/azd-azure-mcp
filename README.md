@@ -6,11 +6,13 @@ This repository demonstrates a modular, scalable approach to Azure automation an
 
 ## Extension Examples
 
-- `mcp.azure` - Root extension that host the Azure MCP server with dynamic discovery
+- `mcp.azure` - Root extension that hosts the Azure MCP server with dynamic discovery
+- `mcp.account` - Extension MCP server for working with Azure account management
 - `mcp.azd` - Extension MCP server for working with `azd` CLI
-- `mcp.resource` - Extension MCP server for working with generic Azure resources
 - `mcp.keyvault` - Extension MCP server for working with Azure KeyVault resources
-- `mcp.storage` - Extension MCP server for working with Azure Storage Accounts
+- `mcp.resource` - Extension MCP server for working with generic Azure resources
+- `mcp.roles` - Extension MCP server for working with Azure role assignments and RBAC
+- `mcp.storage` - Extension MCP server for working with Azure Storage Accounts _**(modeled as a remote MCP server)**_
 
 ## Highlights
 
