@@ -13,7 +13,7 @@ import (
 
 // ExternalToolMetadata implements ToolMetadata for mcp.json tools.
 type ExternalToolMetadata struct {
-	Tool mcpJsonTool
+	tool mcpJsonTool
 }
 
 // mcpJsonTool holds external tool metadata fields.
@@ -27,21 +27,21 @@ type mcpJson struct {
 	Servers []mcpJsonTool `json:"servers"`
 }
 
-func (j *ExternalToolMetadata) Metadata() mcp.Tool {
-	return mcp.NewTool(j.Tool.Name, mcp.WithDescription(j.Tool.Description))
+func (j *ExternalToolMetadata) Tool() mcp.Tool {
+	return mcp.NewTool(j.tool.Name, mcp.WithDescription(j.tool.Description))
 }
 
 func (j *ExternalToolMetadata) CreateClient(ctx context.Context) (*client.Client, error) {
-	endpoint := j.Tool.URL
+	endpoint := j.tool.URL
 	if endpoint == "" {
-		return nil, fmt.Errorf("missing 'url' property for tool %s in mcp.json", j.Tool.Name)
+		return nil, fmt.Errorf("missing 'url' property for tool %s in mcp.json", j.tool.Name)
 	}
 	streamingClient, err := client.NewStreamableHttpClient(endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start streaming MCP client for %s: %w", j.Tool.Name, err)
+		return nil, fmt.Errorf("failed to start streaming MCP client for %s: %w", j.tool.Name, err)
 	}
 	if err := streamingClient.Start(ctx); err != nil {
-		return nil, fmt.Errorf("failed to start streaming MCP client for %s: %w", j.Tool.Name, err)
+		return nil, fmt.Errorf("failed to start streaming MCP client for %s: %w", j.tool.Name, err)
 	}
 
 	initRequest := mcp.InitializeRequest{}
@@ -52,7 +52,7 @@ func (j *ExternalToolMetadata) CreateClient(ctx context.Context) (*client.Client
 	}
 
 	if _, err := streamingClient.Initialize(ctx, initRequest); err != nil {
-		return nil, fmt.Errorf("failed to initialize streaming MCP client for %s: %w", j.Tool.Name, err)
+		return nil, fmt.Errorf("failed to initialize streaming MCP client for %s: %w", j.tool.Name, err)
 	}
 	return streamingClient, nil
 }
@@ -70,7 +70,7 @@ func LoadExternalToolMetadata(ctx context.Context) ([]ToolMetadata, error) {
 
 	var result []ToolMetadata
 	for _, jt := range meta.Servers {
-		result = append(result, &ExternalToolMetadata{Tool: jt})
+		result = append(result, &ExternalToolMetadata{tool: jt})
 	}
 	return result, nil
 }

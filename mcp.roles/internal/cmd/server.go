@@ -31,7 +31,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role assignment list
 			roleAssignmentListTool := mcp.NewTool(
-				"role-assignment-list",
+				"assignment-list",
 				mcp.WithDescription("List role assignments."),
 			)
 			s.AddTool(roleAssignmentListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -41,7 +41,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role assignment create
 			roleAssignmentCreateTool := mcp.NewTool(
-				"role-assignment-create",
+				"assignment-create",
 				mcp.WithDescription("Create a new role assignment."),
 				mcp.WithString("assignee", mcp.Required(), mcp.Description("The assignee principal (user, group, or service principal).")),
 				mcp.WithString("role", mcp.Required(), mcp.Description("The role name or id.")),
@@ -64,7 +64,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role assignment delete
 			roleAssignmentDeleteTool := mcp.NewTool(
-				"role-assignment-delete",
+				"assignment-delete",
 				mcp.WithDescription("Delete a role assignment."),
 				mcp.WithString("assignee", mcp.Description("The assignee principal (user, group, or service principal).")),
 				mcp.WithString("role", mcp.Description("The role name or id.")),
@@ -87,7 +87,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role definition list
 			roleDefinitionListTool := mcp.NewTool(
-				"role-definition-list",
+				"definition-list",
 				mcp.WithDescription("List custom and built-in role definitions."),
 			)
 			s.AddTool(roleDefinitionListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -97,7 +97,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role definition create
 			roleDefinitionCreateTool := mcp.NewTool(
-				"role-definition-create",
+				"definition-create",
 				mcp.WithDescription("Create a custom role definition."),
 				mcp.WithString("roleDefinition", mcp.Required(), mcp.Description("The role definition JSON or file path.")),
 			)
@@ -109,7 +109,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role definition update
 			roleDefinitionUpdateTool := mcp.NewTool(
-				"role-definition-update",
+				"definition-update",
 				mcp.WithDescription("Update a custom role definition."),
 				mcp.WithString("roleDefinition", mcp.Required(), mcp.Description("The role definition JSON or file path.")),
 			)
@@ -121,7 +121,7 @@ func newServerCommand() *cobra.Command {
 
 			// az role definition delete
 			roleDefinitionDeleteTool := mcp.NewTool(
-				"role-definition-delete",
+				"definition-delete",
 				mcp.WithDescription("Delete a custom role definition."),
 				mcp.WithString("name", mcp.Required(), mcp.Description("The name or id of the role definition.")),
 			)

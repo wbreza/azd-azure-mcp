@@ -41,7 +41,7 @@ func newServerCommand() *cobra.Command {
 
 			// list-keyvaults
 			listKeyVaultsTool := mcp.NewTool(
-				"list-keyvaults",
+				"list",
 				mcp.WithDescription("Lists all Key Vaults in a subscription or resource group"),
 				mcp.WithString("resourceGroupName",
 					mcp.Description("The name of the resource group to filter by (optional)"),
@@ -60,7 +60,7 @@ func newServerCommand() *cobra.Command {
 
 			// create-keyvault
 			createKeyVaultTool := mcp.NewTool(
-				"create-keyvault",
+				"create",
 				mcp.WithDescription("Creates a new Azure Key Vault"),
 				mcp.WithString("name",
 					mcp.Required(),
@@ -106,7 +106,7 @@ func newServerCommand() *cobra.Command {
 
 			// delete-keyvault
 			deleteKeyVaultTool := mcp.NewTool(
-				"delete-keyvault",
+				"delete",
 				mcp.WithDescription("Deletes a Key Vault from a resource group"),
 				mcp.WithString("name",
 					mcp.Required(),
@@ -162,7 +162,7 @@ func newServerCommand() *cobra.Command {
 
 			// show-keyvault
 			showKeyVaultTool := mcp.NewTool(
-				"show-keyvault",
+				"show",
 				mcp.WithDescription("Shows details of a specific Azure Key Vault"),
 				mcp.WithString("name",
 					mcp.Required(),
@@ -196,7 +196,7 @@ func newServerCommand() *cobra.Command {
 
 			// show-keyvault-secret
 			showKeyVaultSecretTool := mcp.NewTool(
-				"show-keyvault-secret",
+				"show-secret",
 				mcp.WithDescription("Shows details of a specific secret in a Key Vault"),
 				mcp.WithString("vaultName",
 					mcp.Required(),
@@ -230,7 +230,7 @@ func newServerCommand() *cobra.Command {
 
 			// set-keyvault-secret
 			setKeyVaultSecretTool := mcp.NewTool(
-				"set-keyvault-secret",
+				"set-secret",
 				mcp.WithDescription("Sets a secret in a Key Vault. Creates or updates the secret value."),
 				mcp.WithString("vaultName",
 					mcp.Required(),
@@ -276,7 +276,7 @@ func newServerCommand() *cobra.Command {
 
 			// delete-keyvault-secret
 			deleteKeyVaultSecretTool := mcp.NewTool(
-				"delete-keyvault-secret",
+				"delete-secret",
 				mcp.WithDescription("Deletes a secret from a Key Vault"),
 				mcp.WithString("vaultName",
 					mcp.Required(),

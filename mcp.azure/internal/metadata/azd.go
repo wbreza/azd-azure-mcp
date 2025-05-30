@@ -14,7 +14,7 @@ import (
 
 // AzdToolMetadata implements ToolMetadata for azd extensions.
 type AzdToolMetadata struct {
-	Ext mcpExtensionMetadata
+	extension mcpExtensionMetadata
 }
 
 // mcpExtensionMetadata holds azd extension metadata fields.
@@ -28,35 +28,35 @@ type mcpExtensionMetadata struct {
 	Tags          []string `json:"tags"`
 }
 
-func (a *AzdToolMetadata) Metadata() mcp.Tool {
-	name := strings.TrimPrefix(a.Ext.ID, "mcp.")
-	return mcp.NewTool(name, mcp.WithDescription(a.Ext.Description))
+func (a *AzdToolMetadata) Tool() mcp.Tool {
+	name := strings.TrimPrefix(a.extension.ID, "mcp.")
+	return mcp.NewTool(name, mcp.WithDescription(a.extension.Description))
 }
 
 func (a *AzdToolMetadata) CreateClient(ctx context.Context) (*client.Client, error) {
-	if a.Ext.Installed {
-		if a.Ext.LatestVersion != a.Ext.Version {
-			currentVer, currentVerErr := semver.NewVersion(a.Ext.Version)
-			latestVer, latestVerErr := semver.NewVersion(a.Ext.LatestVersion)
+	if a.extension.Installed {
+		if a.extension.LatestVersion != a.extension.Version {
+			currentVer, currentVerErr := semver.NewVersion(a.extension.Version)
+			latestVer, latestVerErr := semver.NewVersion(a.extension.LatestVersion)
 			if currentVerErr == nil && latestVerErr == nil && latestVer.GreaterThan(currentVer) {
-				upgradeCmd := exec.Command("azd", "ext", "upgrade", a.Ext.ID)
+				upgradeCmd := exec.Command("azd", "ext", "upgrade", a.extension.ID)
 				upgradeOut, err := upgradeCmd.CombinedOutput()
 				if err != nil {
-					return nil, fmt.Errorf("failed to upgrade extension %s: %w\n%s", a.Ext.ID, err, string(upgradeOut))
+					return nil, fmt.Errorf("failed to upgrade extension %s: %w\n%s", a.extension.ID, err, string(upgradeOut))
 				}
 			}
 		}
 	} else {
-		installCmd := exec.Command("azd", "ext", "install", a.Ext.ID)
+		installCmd := exec.Command("azd", "ext", "install", a.extension.ID)
 		installOut, err := installCmd.CombinedOutput()
 		if err != nil {
-			return nil, fmt.Errorf("failed to install extension %s: %w\n%s", a.Ext.ID, err, string(installOut))
+			return nil, fmt.Errorf("failed to install extension %s: %w\n%s", a.extension.ID, err, string(installOut))
 		}
 	}
 
-	nsParts := strings.Split(a.Ext.Namespace, ".")
+	nsParts := strings.Split(a.extension.Namespace, ".")
 	if len(nsParts) < 2 {
-		return nil, fmt.Errorf("invalid namespace for extension: %s", a.Ext.Namespace)
+		return nil, fmt.Errorf("invalid namespace for extension: %s", a.extension.Namespace)
 	}
 	args := append([]string{}, nsParts...)
 	args = append(args, "server", "start")
@@ -70,10 +70,10 @@ func (a *AzdToolMetadata) CreateClient(ctx context.Context) (*client.Client, err
 
 	mcpClient, err := client.NewStdioMCPClient("azd", nil, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start MCP client for %s: %w", a.Ext.ID, err)
+		return nil, fmt.Errorf("failed to start MCP client for %s: %w", a.extension.ID, err)
 	}
 	if _, err := mcpClient.Initialize(ctx, initRequest); err != nil {
-		return nil, fmt.Errorf("failed to initialize Stdio MCP client for %s: %w", a.Ext.ID, err)
+		return nil, fmt.Errorf("failed to initialize Stdio MCP client for %s: %w", a.extension.ID, err)
 	}
 	return mcpClient, nil
 }
@@ -95,7 +95,7 @@ func LoadAzdToolMetadata(ctx context.Context) ([]ToolMetadata, error) {
 		if ext.ID == "mcp.azure" {
 			continue // skip self
 		}
-		result = append(result, &AzdToolMetadata{Ext: ext})
+		result = append(result, &AzdToolMetadata{extension: ext})
 	}
 
 	return result, nil

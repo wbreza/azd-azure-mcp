@@ -37,12 +37,12 @@ func newServerCommand() *cobra.Command {
 			)
 
 			listAccountsTool := mcp.NewTool(
-				"list-storage-accounts",
+				"list-accounts",
 				mcp.WithDescription("Lists all storage accounts in the subscription"),
 			)
 
 			createAccountTool := mcp.NewTool(
-				"create-storage-account",
+				"create-account",
 				mcp.WithDescription("Creates a new azure storage account"),
 				mcp.WithString("storageAccountName",
 					mcp.Required(),
@@ -59,7 +59,7 @@ func newServerCommand() *cobra.Command {
 			)
 
 			showAccountTool := mcp.NewTool(
-				"show-storage-account",
+				"show-account",
 				mcp.WithDescription("Shows details of a specific Azure storage account"),
 				mcp.WithString("storageAccountName",
 					mcp.Required(),
@@ -108,7 +108,7 @@ func newServerCommand() *cobra.Command {
 			)
 
 			deleteAccountTool := mcp.NewTool(
-				"delete-storage-account",
+				"delete-account",
 				mcp.WithDescription("Deletes a storage account from a resource group"),
 				mcp.WithString("storageAccountName",
 					mcp.Required(),

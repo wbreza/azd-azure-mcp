@@ -9,6 +9,6 @@ import (
 
 // ToolMetadata provides a unified interface for tool metadata and client creation.
 type ToolMetadata interface {
-	Metadata() mcp.Tool
+	Tool() mcp.Tool
 	CreateClient(ctx context.Context) (*client.Client, error)
 }
