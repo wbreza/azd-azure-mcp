@@ -1,5 +1,7 @@
 # Azure MCP via `azd` extensions
 
+[View Repository POC](https://github.com/wbreza/azd-azure-mcp)
+
 This repository demonstrates a modular, scalable approach to Azure automation and resource management using the Azure Developer CLI (`azd`) and the Model Context Protocol (MCP). The root `mcp.azure` extension provides a single, unified MCP server that dynamically discovers, installs, and delegates requests to provider-specific MCP extensions (such as storage, keyvault, resource, and azd). This architecture enables real-time, programmatic access to Azure resources and services, supports iterative learning and tool discovery for LLMs/agents, and allows teams to build, ship, and update extensions independently—without requiring changes to the root server. Extensions can be implemented in any language and are loaded on demand, ensuring a minimal, relevant tool surface for automation and AI scenarios.
 
 ## Extension Examples
