@@ -151,6 +151,14 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to save the blob to.")),
 			)
 
+			deleteBlobTool := mcp.NewTool(
+				"delete-blob",
+				mcp.WithDescription("Deletes a blob from a container in a storage account."),
+				mcp.WithString("storageAccountName", mcp.Required(), mcp.Description("The name of the storage account.")),
+				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
+				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to delete.")),
+			)
+
 			// Storage Account Tools
 
 			// List Storage Accounts
@@ -487,6 +495,36 @@ func newServerCommand() *cobra.Command {
 					return mcp.NewToolResultText("Failed to write blob to file: " + err.Error()), nil
 				}
 				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' downloaded successfully to '%s'.", blobName, filePath)), nil
+			})
+
+			// Delete Blob (SDK)
+			s.AddTool(deleteBlobTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				account, err := getRequiredStringArg(request.GetArguments(), "storageAccountName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				container, err := getRequiredStringArg(request.GetArguments(), "containerName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				blobName, err := getRequiredStringArg(request.GetArguments(), "blobName")
+				if err != nil {
+					return mcp.NewToolResultText(err.Error()), nil
+				}
+				cred, err := getCredential()
+				if err != nil {
+					return mcp.NewToolResultText("Failed to get Azure credential: " + err.Error()), nil
+				}
+				serviceUrl := fmt.Sprintf("https://%s.blob.core.windows.net/", account)
+				client, err := azblob.NewClient(serviceUrl, cred, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to create blob service client: " + err.Error()), nil
+				}
+				_, err = client.DeleteBlob(ctx, container, blobName, nil)
+				if err != nil {
+					return mcp.NewToolResultText("Failed to delete blob: " + err.Error()), nil
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' deleted successfully from container '%s'.", blobName, container)), nil
 			})
 
 			// Start the HTTP server on http://localhost:8080/mcp
