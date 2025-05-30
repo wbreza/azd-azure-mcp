@@ -65,18 +65,32 @@ The root `mcp.azure` server uses a dynamic discovery mechanism to enumerate and 
 - Starts the MCP server for each provider extension only when needed.
 - Maintains a cache of running tool clients to avoid redundant startups.
 
-### The "Learn" Pattern
+### The "Learn" Pattern and Azure Tool Parameters
 
-The "learn" pattern is a core feature for LLMs/agents and users to explore available capabilities. When a request is made with the `learn` argument set to `true`, the root server returns a list of available tools and their schemas. This response uses the **same MCP tool list schema** as the MCP protocol itself, ensuring:
+The "learn" pattern is a core feature for LLMs/agents and users to explore available capabilities. The single `azure` tool exposes a flexible set of parameters that enable dynamic discovery and invocation of all available Azure MCP extension capabilities:
+
+- `intent` (string): The high-level operation or scenario the agent/user wants to perform (e.g., "deploy", "list", "delete").
+- `tool` (string): The name of the provider extension or sub-tool to invoke (e.g., "storage", "keyvault", "resource", "azd").
+- `command` (string): The specific command or operation to execute within the selected tool (e.g., "list-containers", "delete-blob").
+- `parameters` (object): A dictionary of command-specific parameters (e.g., storage account name, container name, blob name, etc.).
+- `learn` (boolean): If set to `true`, triggers the "learn" pattern, returning the list of available tools and their schemas. Can be used recursively to drill down into sub-tools and commands.
+
+#### Intended Usage Cycle
+
+1. **Discovery:** The agent or user can always call the same `azure` tool, using the `learn` parameter to discover available sub-tools and commands in real time. For example:
+   - `learn: true` with no tool specified returns the top-level list of available tools (e.g., storage, keyvault, resource, azd, etc.).
+   - `learn: true, tool: "storage"` returns the list of commands and parameters supported by the storage extension, using the same MCP tool schema.
+2. **Selection:** The agent can reason about the available tools and commands, and select the appropriate `tool`, `command`, and `parameters` for the desired operation.
+3. **Invocation:** The agent invokes the selected operation by calling the `azure` tool with the chosen parameters.
+4. **Iteration:** At any point, the agent can re-invoke `learn` to further explore or adapt to new capabilities, supporting robust, iterative, and agent-friendly automation.
+
+This response uses the **same MCP tool list schema** as the MCP protocol itself, ensuring:
 
 - Consistency: The tool list and schema are always up-to-date and machine-readable.
 - Iterative Exploration: Agents can call `learn` recursively, specifying a tool name to drill down into its supported commands and parameters.
 - Self-Describing: The system is fully self-describing, enabling agents to reason about and select tools programmatically.
 
-For example:
-
-- `learn: true` with no tool specified returns the top-level list of available tools (e.g., storage, keyvault, resource, azd, etc.).
-- `learn: true, tool: "storage"` returns the list of commands and parameters supported by the storage extension, using the same MCP tool schema.
+This approach maximizes discoverability, flexibility, and agentic reasoning, making it well-suited for LLM-driven automation and interactive scenarios.
 
 ### Sampling
 
@@ -147,3 +161,21 @@ This project uses a **dynamic extension model**: the root `mcp.azure` server dis
 - May expose a large number of tools at once, which could bloat/confuse/delay LLMs or agents during initial tool selection, especially as the number of tools grows.
 
 This dynamic approach maximizes flexibility, scalability, and team autonomy, at the cost of slightly increased complexity and first-use latency, while also helping LLMs/agents focus on a relevant, manageable set of tools.
+
+## Comparison: Dynamic Tool Notification vs. Single "Azure" Tool with Learning
+
+[See the dynamic proxy approach branch on GitHub](https://github.com/wbreza/azd-azure-mcp/tree/proxy)
+
+An alternative approach to the current architecture is to dynamically add tools to the MCP server at runtime and send a `tools/list_changed` notification to the LLM/agent. This notification informs the agent that new tools are available, allowing it to invoke them as needed.
+
+**In practice, however, this approach did not work as intended:**
+
+- Even though the `tools/list_changed` notification was sent, the agent did not leverage any new tools within its current task or reasoning cycle.
+- The agent only became aware of and used the new tools after the current request completed and a new, similar request was made.
+- This led to a less fluid and less agentic experience, as the agent could not immediately take advantage of new capabilities in the middle of a workflow.
+
+**In contrast, the single `azure` tool with dynamic learning capability proved much more effective:**
+
+- The agent can always call the same `azure` tool, using the `learn` pattern to discover available sub-tools and commands in real time.
+- The agent is able to construct additional calls to the same `azure` tool with the appropriate `tool`, `command`, and `parameters`, which are then handled and proxied correctly by the root server.
+- This model supports robust, iterative, and agent-friendly automation, as the agent can reason about and select tools programmatically without waiting for a new reasoning cycle or external notification.
