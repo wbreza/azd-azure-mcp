@@ -112,7 +112,7 @@ This approach makes the system highly discoverable and agent-friendly, supportin
 
 ## Architecture & Flow (Sequence Diagram)
 
-The following sequence diagram illustrates the dynamic, on-demand nature of extension management and call dispatching:
+The following sequence diagram illustrates the three main flows in the dynamic, on-demand extension management and call dispatching model:
 
 ```mermaid
 sequenceDiagram
@@ -121,11 +121,16 @@ sequenceDiagram
     participant azd as azd CLI
     participant Provider as azd mcp Extension (e.g., mcp.storage)
 
-    User->>AzureMCP: Call (intent/tool/command/parameters/learn)
+    %% 1. Root learn
+    Note over User,AzureMCP: 1. Root learn (discover top-level tools)
+    User->>AzureMCP: Call (learn: true)
     AzureMCP->>azd: azd ext list --tags azure,mcp
     azd-->>AzureMCP: Extension metadata (list of providers)
-    AzureMCP->>User: Tool list (if learn)
-    User->>AzureMCP: Call tool/command
+    AzureMCP->>User: Tool list (top-level tools)
+
+    %% 2. Tool learn
+    Note over User,AzureMCP: 2. Tool learn (discover tool commands/parameters)
+    User->>AzureMCP: Call (learn: true, tool: "storage")
     AzureMCP->>AzureMCP: Check tool client cache
     alt Not cached
         AzureMCP->>azd: azd ext install <provider>
@@ -134,7 +139,22 @@ sequenceDiagram
         azd-->>AzureMCP: Provider MCP server started
         AzureMCP->>AzureMCP: Create MCP client
     end
-    AzureMCP->>Provider: Call tool/command
+    AzureMCP->>Provider: Call (learn: true)
+    Provider-->>AzureMCP: Tool schema (commands/parameters)
+    AzureMCP->>User: Tool schema (commands/parameters)
+
+    %% 3. Tool invocation
+    Note over User,AzureMCP: 3. Tool invocation (execute command)
+    User->>AzureMCP: Call (tool: "storage", command: "delete-blob", parameters)
+    AzureMCP->>AzureMCP: Check tool client cache
+    alt Not cached
+        AzureMCP->>azd: azd ext install <provider>
+        azd-->>AzureMCP: Install result
+        AzureMCP->>azd: <provider> server start
+        azd-->>AzureMCP: Provider MCP server started
+        AzureMCP->>AzureMCP: Create MCP client
+    end
+    AzureMCP->>Provider: Call (command: "delete-blob", parameters)
     Provider-->>AzureMCP: Result
     AzureMCP-->>User: Result
 ```
