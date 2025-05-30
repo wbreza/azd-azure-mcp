@@ -39,8 +39,8 @@ func newServerCommand() *cobra.Command {
 					Use this tool for any Azure control plane or data plane operation, including resource management and automation.
 					To discover available capabilities, call the tool with the "learn" parameter to get a list of top-level tools.
 					To explore further, set "learn" and specify a tool name to retrieve supported commands and their parameters.
-					To execute an action, set the "tool", "command", and convert the users intent into the "parameters" based on the discovered schema.
-					Always use this tool for any Azure or "azd" related operation requiring up-to-date, dynamic, and interactive capabilities.
+					Once discovered, tools will be added and a notification will be sent for the added tools.
+					Newly discovered tools can be invoked immediately.
 				`),
 			)
 
@@ -69,128 +69,92 @@ func newServerCommand() *cobra.Command {
 			azureTool := mcp.NewTool(
 				"azure",
 				mcp.WithDescription(`
-					This server/tool provides real-time, programmatic access to all Azure products, services, and resources,
-					as well as all interactions with the Azure Developer CLI (azd).
-					Use this tool for any Azure control plane or data plane operation, including resource management and automation.
-					To discover available capabilities, call the tool with the "learn" parameter to get a list of top-level tools.
-					To explore further, set "learn" and specify a tool name to retrieve supported commands and their parameters.
-					To execute an action, set the "tool", "command", and convert the users intent into the "parameters" based on the discovered schema.
-					Always use this tool for any Azure or "azd" related operation requiring up-to-date, dynamic, and interactive capabilities.
+					This tool provides discovery of additional tools that provide real-time, programmatic access to all Azure products, services, and resources,
+					This includes Azure control plane or data plane operation, including resource management and automation.
+					To discover available capabilities, call the tool to get a list of top-level categories.
+					To explore further, specify a category name to discovery additional tools for a category.
+					Once discovered, tools will be added and a notification will be sent for the added tools.
+					Newly discovered tools can be invoked immediately.
 				`),
-				mcp.WithString("intent",
-					mcp.Required(),
-					mcp.Description("The intent of the operation the user wants to perform against azure."),
-				),
-				mcp.WithString("tool",
+				mcp.WithString("category",
 					mcp.Description("The azure tool to use to execute the operation."),
-				),
-				mcp.WithString("command",
-					mcp.Description("The command to execute against the specified tool."),
-				),
-				mcp.WithObject("parameters",
-					mcp.Description("The parameters to pass to the tool"),
-				),
-				mcp.WithBoolean("learn",
-					mcp.Description("To learn about the tool and its supported child tools and parameters."),
-					mcp.DefaultBool(false),
 				),
 			)
 
 			s.AddTool(azureTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				toolName, hasToolName := request.GetArguments()["tool"].(string)
+				categoryName, hasToolName := request.GetArguments()["category"].(string)
 
-				learn, ok := request.GetArguments()["learn"].(bool)
-				if ok && learn {
-					if hasToolName && toolName != "" {
-						tm, ok := toolMetadataMap[toolName]
-						if !ok {
-							return mcp.NewToolResultText(fmt.Sprintf(`
-								Tool %s not found
-								Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
-							`, toolName)), nil
+				if hasToolName && categoryName != "" {
+					tm, ok := toolMetadataMap[categoryName]
+					if !ok {
+						return mcp.NewToolResultText(fmt.Sprintf(`
+							Category %s not found
+							Run again with the empty category to get a list of top level categories
+						`, categoryName)), nil
+					}
+
+					// Caching at caller side
+					cacheKey := categoryName
+					toolClient, ok := toolClientCache[cacheKey]
+					if !ok {
+						var err error
+						toolClient, err = tm.CreateClient(ctx)
+						if err != nil {
+							return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
 						}
 
-						// Caching at caller side
-						cacheKey := toolName
-						toolClient, ok := toolClientCache[cacheKey]
-						if !ok {
-							var err error
-							toolClient, err = tm.CreateClient(ctx)
+						toolClientCache[cacheKey] = toolClient
+					}
+
+					childTools, err := toolClient.ListTools(ctx, mcp.ListToolsRequest{})
+					if err != nil {
+						return nil, fmt.Errorf("failed to get child tools: %w", err)
+					}
+
+					for _, childTool := range childTools.Tools {
+						s.AddTool(childTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+							toolCallResult, err := toolClient.CallTool(ctx, request)
 							if err != nil {
-								return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
+								return mcp.NewToolResultText(fmt.Sprintf(`
+									There was an error finding or calling tool.
+									Failed to call tool: %s, Error: %v
+
+									Run "learn" tool to discovery a list of available tools for a category.
+								`, categoryName, err)), nil
 							}
+							return toolCallResult, nil
+						})
+					}
 
-							toolClientCache[cacheKey] = toolClient
-						}
-
-						childTools, err := toolClient.ListTools(ctx, mcp.ListToolsRequest{})
-						if err != nil {
-							return nil, fmt.Errorf("failed to get child tools: %w", err)
-						}
-						toolsJson, err := json.MarshalIndent(childTools, "", "  ")
-						if err != nil {
-							return nil, fmt.Errorf("failed get get learn content: %w", err)
-						}
-						learnContent := fmt.Sprintf(`
-							Here are the available command and their parameters for '%s' tool.
-							If you do not find a suitable tool, run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
-
-							%s
-						`, toolName, string(toolsJson))
-
-						return mcp.NewToolResultText(learnContent), nil
+					if err := s.SendNotificationToClient(ctx, mcp.MethodNotificationToolsListChanged, map[string]any{
+						"action": "added",
+						"tools":  childTools,
+					}); err != nil {
+						return nil, fmt.Errorf("failed to send tools list changed notification: %w", err)
 					}
 
 					toolsJson, err := json.MarshalIndent(childTools, "", "  ")
 					if err != nil {
 						return nil, fmt.Errorf("failed get get learn content: %w", err)
 					}
+					learnContent := fmt.Sprintf(`
+						New tools have been discovered for the '%s' category. They have been updated in the tools list.
 
-					return mcp.NewToolResultText(string(toolsJson)), nil
+						Here are the available command and their parameters for '%s' tool.
+						If you do not find a suitable tool, run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
+
+						%s
+					`, categoryName, categoryName, string(toolsJson))
+
+					return mcp.NewToolResultText(learnContent), nil
 				}
 
-				commandName, hasCommandName := request.GetArguments()["command"].(string)
-				if !hasToolName || !hasCommandName {
-					return mcp.NewToolResultText(`
-						The "tool" and "command" parameters are required when not learning
-						Run again with the "learn" argument to get a list of available tools and their parameters.
-						To learn about a specific tool, use the "tool" argument with the name of the tool.
-					`), nil
-				}
-				tm, ok := toolMetadataMap[toolName]
-				if !ok {
-					return mcp.NewToolResultText(fmt.Sprintf(`
-						Tool %s not found
-						Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
-					`, toolName)), nil
-				}
-
-				cacheKey := toolName
-				toolClient, ok := toolClientCache[cacheKey]
-				if !ok {
-					var err error
-					toolClient, err = tm.CreateClient(ctx)
-					if err != nil {
-						return mcp.NewToolResultText(fmt.Sprintf("Failed to start tool client: %v", err)), nil
-					}
-					toolClientCache[cacheKey] = toolClient
-				}
-
-				params := request.GetArguments()["parameters"]
-				childRequest := request
-				childRequest.Params.Name = commandName
-				childRequest.Params.Arguments = params
-
-				toolCallResult, err := toolClient.CallTool(ctx, childRequest)
+				toolsJson, err := json.MarshalIndent(childTools, "", "  ")
 				if err != nil {
-					return mcp.NewToolResultText(fmt.Sprintf(`
-						There was an error finding or calling tool and command.
-						Failed to call tool: %s, command: %s, Error: %v
-
-						Run again with the "learn" argument and the "tool" name to get a list of available tools and their parameters.
-					`, toolName, commandName, err)), nil
+					return nil, fmt.Errorf("failed get get learn content: %w", err)
 				}
-				return toolCallResult, nil
+
+				return mcp.NewToolResultText(string(toolsJson)), nil
 			})
 
 			// Start the server
