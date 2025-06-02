@@ -4,9 +4,9 @@ description: Provides automation and tools for listing, creating, and deleting A
 displayName: Azure Role Assignments MCP Tool
 id: mcp.roles
 language: go
-namespace: mcp.azure.roles
+namespace: mcp.roles
 tags:
   - azure
   - mcp
-usage: azd mcp azure roles <command> [options]
+usage: azd mcp roles <command> [options]
 version: 0.0.1
