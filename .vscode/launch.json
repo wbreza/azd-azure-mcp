@@ -5,11 +5,17 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Attach to Process",
+      "name": "Attach to Go Process",
       "type": "go",
       "request": "attach",
       "mode": "local",
       "processId": "${command:pickGoProcess}"
+    },
+    {
+      "name": "Attach to .NET Process",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
     }
   ]
 }

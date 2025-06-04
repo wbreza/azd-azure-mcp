@@ -1,0 +1,10 @@
+{
+    "servers": [
+        {
+            "id": "mcp.storage",
+            "name": "storage",
+            "url": "http://localhost:8081/storage/mcp",
+            "description": "This server provides tools and automation for managing Azure Storage Account resources, containers and blobs."
+        }
+    ]
+}

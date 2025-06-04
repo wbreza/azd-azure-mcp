@@ -43,3 +43,26 @@ vendor/
 mcp-*-windows-*.exe
 mcp-*-linux-*.exe
 mcp-*-darwin-*.exe
+
+# .NET/C# build artifacts
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.pdb
+*.cache
+*.dbmdl
+*.dbproj.schemaview
+*.dbproj.user
+*.jfm
+# Rider
+.idea/
+# VS Code
+.vscode/
+# NuGet
+*.nupkg
+*.snupkg
+# Test results
+TestResults/
+_ReSharper*/

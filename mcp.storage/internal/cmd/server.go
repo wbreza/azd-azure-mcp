@@ -34,6 +34,13 @@ func newServerCommand() *cobra.Command {
 				server.WithPromptCapabilities(false),
 				server.WithResourceCapabilities(false, false),
 				server.WithInstructions("Supports tools interactions with Azure Storage accounts, containers and blobs."),
+				server.WithHooks(&server.Hooks{
+					OnError: []server.OnErrorHookFunc{
+						func(ctx context.Context, id any, method mcp.MCPMethod, message any, err error) {
+							fmt.Printf("Error in method %s with ID %v: %s\n", method, id, err.Error())
+						},
+					},
+				}),
 			)
 
 			listAccountsTool := mcp.NewTool(
@@ -527,7 +534,7 @@ func newServerCommand() *cobra.Command {
 				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' deleted successfully from container '%s'.", blobName, container)), nil
 			})
 
-			// Start the HTTP server on http://localhost:8080/mcp
+			// Start the HTTP server on http://localhost:8081/mcp
 			sseServer := server.NewStreamableHTTPServer(s,
 				server.WithEndpointPath("/storage/mcp"),
 			)

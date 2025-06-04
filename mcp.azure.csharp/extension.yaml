@@ -1,0 +1,9 @@
+capabilities:
+    - custom-commands
+description: An Azure MCP server
+displayName: Azure MCP Server
+id: mcp.azure.csharp
+language: dotnet
+namespace: mcp.azure
+usage: azd mcp.azure <command> [options]
+version: 0.0.1
