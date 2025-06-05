@@ -110,7 +110,8 @@ public static class AzdExtensionLoader
     private static readonly HashSet<string> IgnoreToolIds = new(StringComparer.OrdinalIgnoreCase)
     {
         "mcp.azure",
-        "mcp.azure.csharp"
+        "mcp.azure.csharp",
+        "mcp.azure.ts"
     };
 
     public static async Task<List<AzdExtension>> ListAzdExtensionsAsync()

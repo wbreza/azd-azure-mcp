@@ -5,7 +5,6 @@ using Spectre.Console;
 using Json.Schema;
 using Json.More;
 using ModelContextProtocol.Client;
-using ModelContextProtocol;
 
 namespace Azure.Mcp.Tools;
 
@@ -30,20 +29,25 @@ public class AzureTool : McpServerTool
             .Properties(
                 ("intent", new JsonSchemaBuilder()
                     .Type(SchemaValueType.String)
-                    .Description("The intent of the operation the user wants to perform against azure.")),
+                    .Description("The intent of the operation the user wants to perform against azure.")
+                ),
                 ("tool", new JsonSchemaBuilder()
                     .Type(SchemaValueType.String)
-                    .Description("The azure tool to use to execute the operation.")),
+                    .Description("The azure tool to use to execute the operation.")
+                ),
                 ("command", new JsonSchemaBuilder()
                     .Type(SchemaValueType.String)
-                    .Description("The command to execute against the specified tool.")),
+                    .Description("The command to execute against the specified tool.")
+                ),
                 ("parameters", new JsonSchemaBuilder()
                     .Type(SchemaValueType.Object)
-                    .Description("The parameters to pass to the tool command.")),
+                    .Description("The parameters to pass to the tool command.")
+                ),
                 ("learn", new JsonSchemaBuilder()
                     .Type(SchemaValueType.Boolean)
                     .Description("To learn about the tool and its supported child tools and parameters.")
-                    .Default(false))
+                    .Default(false)
+                )
             )
             .AdditionalProperties(false)
             .Build()
@@ -52,16 +56,37 @@ public class AzureTool : McpServerTool
     };
 
     private readonly Metadata.McpClientProviderLoader _providerLoader = new Metadata.McpClientProviderLoader();
+    private static readonly JsonElement ToolCallSchema = new JsonSchemaBuilder()
+        .Type(SchemaValueType.Object)
+        .Properties(
+            ("tool", new JsonSchemaBuilder()
+                .Type(SchemaValueType.String)
+                .Description("The name of the tool to call.")
+            ),
+            ("parameters", new JsonSchemaBuilder()
+                .Type(SchemaValueType.Object)
+                .Description("A key/value pair of parameters names nad values to pass to the tool call command.")
+            )
+        )
+        .Build()
+        .ToJsonDocument()
+        .RootElement;
+    private static readonly string ToolCallSchemaJson = JsonSerializer.Serialize(ToolCallSchema, new JsonSerializerOptions { WriteIndented = true });
 
     public override async ValueTask<CallToolResponse> InvokeAsync(RequestContext<CallToolRequestParams> request, CancellationToken cancellationToken = default)
     {
         var args = request.Params?.Arguments;
+        string? intent = null;
         bool learn = false;
         string? tool = null;
         string? command = null;
 
         if (args != null)
         {
+            if (args.TryGetValue("intent", out var intentElem) && intentElem.ValueKind == JsonValueKind.String)
+            {
+                intent = intentElem.GetString();
+            }
             if (args.TryGetValue("learn", out var learnElem) && learnElem.ValueKind == JsonValueKind.True)
             {
                 learn = true;
@@ -76,17 +101,28 @@ public class AzureTool : McpServerTool
             }
         }
 
+        if (!string.IsNullOrEmpty(intent) && string.IsNullOrEmpty(tool) && string.IsNullOrEmpty(command) && !learn)
+        {
+            learn = true;
+        }
+
         if (learn && string.IsNullOrEmpty(tool) && string.IsNullOrEmpty(command))
         {
-            return await RootLearnModeAsync(request, cancellationToken);
+            return await RootLearnModeAsync(request, intent ?? "", cancellationToken);
         }
         else if (learn && !string.IsNullOrEmpty(tool) && string.IsNullOrEmpty(command))
         {
-            return await ToolLearnModeAsync(request, tool!, cancellationToken);
+            return await ToolLearnModeAsync(request, intent ?? "", tool!, cancellationToken);
         }
         else if (!learn && !string.IsNullOrEmpty(tool) && !string.IsNullOrEmpty(command))
         {
-            return await CommandModeAsync(request, tool!, command!, cancellationToken);
+            Dictionary<string, object?> toolParams = new();
+            if (args != null && args.TryGetValue("parameters", out var parametersElem) && parametersElem.ValueKind == JsonValueKind.Object)
+            {
+                toolParams = JsonSerializer.Deserialize<Dictionary<string, object?>>(parametersElem.GetRawText()) ?? new();
+            }
+
+            return await CommandModeAsync(request, intent ?? "", tool!, command!, toolParams, cancellationToken);
         }
 
         return new CallToolResponse
@@ -105,7 +141,7 @@ public class AzureTool : McpServerTool
         };
     }
 
-    private async Task<CallToolResponse> RootLearnModeAsync(RequestContext<CallToolRequestParams> request, CancellationToken cancellationToken)
+    private async Task<CallToolResponse> RootLearnModeAsync(RequestContext<CallToolRequestParams> request, string intent, CancellationToken cancellationToken)
     {
         var providerMetadataList = await _providerLoader.ListProviderMetadataAsync();
         var tools = new List<Tool>();
@@ -123,8 +159,7 @@ public class AzureTool : McpServerTool
         };
 
         var toolsJson = JsonSerializer.Serialize(toolsResult, new JsonSerializerOptions { WriteIndented = true });
-
-        return new CallToolResponse
+        var learnResponse = new CallToolResponse
         {
             Content =
             [
@@ -135,36 +170,37 @@ public class AzureTool : McpServerTool
                         Next, identify the tool you want to learn about and run again with the "learn" argument and the "tool" name to get a list of available commands and their parameters.
 
                         {toolsJson}
-                    """
+                        """
                 }
             ]
         };
+
+        var response = learnResponse;
+
+        if (SupportsSampling(request))
+        {
+            var toolName = await GetToolNameFromIntentAsync(request, intent, toolsJson, cancellationToken);
+            if (toolName != null)
+            {
+                response = await ToolLearnModeAsync(request, intent, toolName, cancellationToken);
+            }
+        }
+
+        return response;
     }
 
-    private async Task<CallToolResponse> ToolLearnModeAsync(RequestContext<CallToolRequestParams> request, string tool, CancellationToken cancellationToken)
+    private async Task<CallToolResponse> ToolLearnModeAsync(RequestContext<CallToolRequestParams> request, string intent, string tool, CancellationToken cancellationToken)
     {
         var client = await _providerLoader.GetProviderClientAsync(tool);
         if (client == null)
         {
-            return new CallToolResponse
-            {
-                Content =
-                [
-                    new Content {
-                        Type = "text",
-                        Text = $"""
-                            Tool '{tool}' not found.
-                            Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
-                        """
-                    }
-                ]
-            };
+            return await RootLearnModeAsync(request, intent, cancellationToken);
         }
 
         var listToolsResult = await client.ListToolsAsync();
         var toolsJson = JsonSerializer.Serialize(listToolsResult, new JsonSerializerOptions { WriteIndented = true });
 
-        return new CallToolResponse
+        var learnResponse = new CallToolResponse
         {
             Content =
             [
@@ -176,24 +212,27 @@ public class AzureTool : McpServerTool
                         Next, identify the command you want to execute and run again with the "tool", "command", and "parameters" arguments.
 
                         {toolsJson}
-                    """
+                        """
                 }
             ]
         };
-    }
 
-    private async Task<CallToolResponse> CommandModeAsync(RequestContext<CallToolRequestParams> request, string tool, string command, CancellationToken cancellationToken)
-    {
-        var args = request.Params?.Arguments;
-        JsonElement parameters = default;
-        if (args != null)
+        var response = learnResponse;
+
+        if (SupportsSampling(request))
         {
-            if (args.TryGetValue("parameters", out var paramElem))
+            var (commandName, parameters) = await GetCommandAndParametersFromIntentAsync(request, intent, tool, toolsJson, cancellationToken);
+            if (commandName != null)
             {
-                parameters = paramElem;
+                response = await CommandModeAsync(request, intent, tool, commandName, parameters, cancellationToken);
             }
         }
 
+        return response;
+    }
+
+    private async Task<CallToolResponse> CommandModeAsync(RequestContext<CallToolRequestParams> request, string intent, string tool, string command, Dictionary<string, object?> parameters, CancellationToken cancellationToken)
+    {
         IMcpClient? client;
 
         try
@@ -201,19 +240,7 @@ public class AzureTool : McpServerTool
             client = await _providerLoader.GetProviderClientAsync(tool);
             if (client == null)
             {
-                return new CallToolResponse
-                {
-                    Content =
-                    [
-                        new Content {
-                            Type = "text",
-                            Text = $"""
-                                Tool '{tool}' not found.
-                                Run again with the "learn" argument and empty "tool" to get a list of available tools and their parameters.
-                            """
-                        }
-                    ]
-                };
+                return await RootLearnModeAsync(request, intent, cancellationToken);
             }
         }
         catch (Exception ex)
@@ -228,21 +255,15 @@ public class AzureTool : McpServerTool
                             There was an error connecting to the tool.
                             Failed to get tool: {tool}
                             Error: {ex.Message}
-                        """
+                            """
                     }
                 ]
             };
         }
 
-        var toolArgs = new Dictionary<string, object?>();
-        if (parameters.ValueKind == JsonValueKind.Object)
-        {
-            toolArgs = JsonSerializer.Deserialize<Dictionary<string, object?>>(parameters.GetRawText()) ?? new();
-        }
-
         try
         {
-            return await client.CallToolAsync(command, toolArgs, cancellationToken: cancellationToken);
+            return await client.CallToolAsync(command, parameters, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -258,10 +279,118 @@ public class AzureTool : McpServerTool
                             Error: {ex.Message}
 
                             Run again with the "learn" argument and the "tool" name to get a list of available tools and their parameters.
-                        """
+                            """
                     }
                 ]
             };
         }
+    }
+
+    // --- Private helper methods moved to bottom ---
+    private static bool SupportsSampling(RequestContext<CallToolRequestParams> request)
+    {
+        return request.Server?.ClientCapabilities?.Sampling != null;
+    }
+
+    private async Task<string?> GetToolNameFromIntentAsync(RequestContext<CallToolRequestParams> request, string intent, string toolsJson, CancellationToken cancellationToken)
+    {
+        var samplingRequest = new CreateMessageRequestParams
+        {
+            Messages = [
+                new SamplingMessage
+                {
+                    Role = Role.Assistant,
+                    Content = new Content{
+                        Type = "text",
+                        Text = $"""
+                            The following is a list of available tools for the Azure server.
+                            Find the tool name that best matches the user's intent and return the name of the tool.
+
+                            Intent:
+                            {intent ?? "No intent provided"}
+
+                            Available Tools:
+                            {toolsJson}
+                            """
+                    }
+                }
+            ],
+        };
+        try
+        {
+            var samplingResponse = await request.Server.RequestSamplingAsync(samplingRequest, cancellationToken);
+            var toolName = samplingResponse.Content.Text?.Trim();
+            if (!string.IsNullOrEmpty(toolName) && toolName != "Unknown")
+            {
+                return toolName;
+            }
+        }
+        catch
+        {
+            // ignore and return null
+        }
+        return null;
+    }
+
+    private async Task<(string? commandName, Dictionary<string, object?> parameters)> GetCommandAndParametersFromIntentAsync(
+        RequestContext<CallToolRequestParams> request,
+        string? intent,
+        string tool,
+        string toolsJson,
+        CancellationToken cancellationToken)
+    {
+        var samplingRequest = new CreateMessageRequestParams
+        {
+            Messages = [
+                new SamplingMessage
+                {
+                    Role = Role.Assistant,
+                    Content = new Content{
+                        Type = "text",
+                        Text = $"""
+                            This is a list of available tools for the {tool} server.
+                            Find the tool that best matches the user's intent and return a valid JSON object that maps to the following schema:
+
+                            Schema:
+                            {ToolCallSchemaJson}
+
+                            Intent: {intent ?? "No intent provided"}
+
+                            Available Tools:
+                            {toolsJson}
+                            """
+                    }
+                }
+            ],
+        };
+        try
+        {
+            var samplingResponse = await request.Server.RequestSamplingAsync(samplingRequest, cancellationToken);
+            var toolCallJson = samplingResponse.Content.Text?.Trim();
+            string? commandName = null;
+            Dictionary<string, object?> parameters = new();
+            if (!string.IsNullOrEmpty(toolCallJson))
+            {
+                using var doc = JsonDocument.Parse(toolCallJson);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("tool", out var toolProp) && toolProp.ValueKind == JsonValueKind.String)
+                {
+                    commandName = toolProp.GetString();
+                }
+                if (root.TryGetProperty("parameters", out var paramsProp) && paramsProp.ValueKind == JsonValueKind.Object)
+                {
+                    parameters = JsonSerializer.Deserialize<Dictionary<string, object?>>(paramsProp.GetRawText()) ?? new();
+                }
+            }
+            if (commandName != null && commandName != "Unknown")
+            {
+                return (commandName, parameters);
+            }
+        }
+        catch
+        {
+            // ignore and return default
+        }
+        return (null, new Dictionary<string, object?>());
     }
 }

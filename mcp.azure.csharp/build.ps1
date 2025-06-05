@@ -57,9 +57,10 @@ foreach ($PLATFORM in $PLATFORMS) {
 
     # Run dotnet publish for single file executable
     dotnet publish `
-        -c Debug `
+        -c Release `
         -r $RUNTIME `
         -o $OUTPUT_DIR `
+        /p:PublishTrimmed=true `
         $PROJECT_FILE
 
     if ($LASTEXITCODE -ne 0) {
