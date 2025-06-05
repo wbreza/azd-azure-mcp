@@ -5,12 +5,39 @@ using Spectre.Console;
 using Json.Schema;
 using Json.More;
 using ModelContextProtocol.Client;
+using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
 
 namespace Azure.Mcp.Tools;
 
 [McpServerToolType]
 public class AzureTool : McpServerTool
 {
+    public AzureTool(ILogger<AzureTool> logger)
+    {
+        _logger = logger;
+        _logger.LogInformation("AzureTool initialized.");
+    }
+
+    private readonly Metadata.McpClientProviderLoader _providerLoader = new Metadata.McpClientProviderLoader();
+    private static readonly JsonElement ToolCallSchema = new JsonSchemaBuilder()
+        .Type(SchemaValueType.Object)
+        .Properties(
+            ("tool", new JsonSchemaBuilder()
+                .Type(SchemaValueType.String)
+                .Description("The name of the tool to call.")
+            ),
+            ("parameters", new JsonSchemaBuilder()
+                .Type(SchemaValueType.Object)
+                .Description("A key/value pair of parameters names nad values to pass to the tool call command.")
+            )
+        )
+        .Build()
+        .ToJsonDocument()
+        .RootElement;
+    private static readonly string ToolCallSchemaJson = JsonSerializer.Serialize(ToolCallSchema, new JsonSerializerOptions { WriteIndented = true });
+    private readonly ILogger<AzureTool> _logger;
+
     public override Tool ProtocolTool => new Tool
     {
         Name = "azure",
@@ -22,6 +49,7 @@ public class AzureTool : McpServerTool
             To explore further, set "learn" and specify a tool name to retrieve supported commands and their parameters.
             To execute an action, set the "tool", "command", and convert the users intent into the "parameters" based on the discovered schema.
             Always use this tool for any Azure or "azd" related operation requiring up-to-date, dynamic, and interactive capabilities.
+            Always include the "intent" parameter to specify the operation you want to perform.
         """,
         Annotations = new ToolAnnotations(),
         InputSchema = new JsonSchemaBuilder()
@@ -29,7 +57,8 @@ public class AzureTool : McpServerTool
             .Properties(
                 ("intent", new JsonSchemaBuilder()
                     .Type(SchemaValueType.String)
-                    .Description("The intent of the operation the user wants to perform against azure.")
+                    .Required()
+                    .Description("The intent of the azure operation to perform.")
                 ),
                 ("tool", new JsonSchemaBuilder()
                     .Type(SchemaValueType.String)
@@ -54,24 +83,6 @@ public class AzureTool : McpServerTool
             .ToJsonDocument()
             .RootElement
     };
-
-    private readonly Metadata.McpClientProviderLoader _providerLoader = new Metadata.McpClientProviderLoader();
-    private static readonly JsonElement ToolCallSchema = new JsonSchemaBuilder()
-        .Type(SchemaValueType.Object)
-        .Properties(
-            ("tool", new JsonSchemaBuilder()
-                .Type(SchemaValueType.String)
-                .Description("The name of the tool to call.")
-            ),
-            ("parameters", new JsonSchemaBuilder()
-                .Type(SchemaValueType.Object)
-                .Description("A key/value pair of parameters names nad values to pass to the tool call command.")
-            )
-        )
-        .Build()
-        .ToJsonDocument()
-        .RootElement;
-    private static readonly string ToolCallSchemaJson = JsonSerializer.Serialize(ToolCallSchema, new JsonSerializerOptions { WriteIndented = true });
 
     public override async ValueTask<CallToolResponse> InvokeAsync(RequestContext<CallToolRequestParams> request, CancellationToken cancellationToken = default)
     {
@@ -105,6 +116,13 @@ public class AzureTool : McpServerTool
         {
             learn = true;
         }
+
+        _logger.LogDebug("InvokeAsync called: Intent={Intent}, Learn={Learn}, Tool={Tool}, Command={Command}",
+            intent,
+            learn,
+            tool,
+            command
+        );
 
         if (learn && string.IsNullOrEmpty(tool) && string.IsNullOrEmpty(command))
         {
@@ -177,7 +195,7 @@ public class AzureTool : McpServerTool
 
         var response = learnResponse;
 
-        if (SupportsSampling(request))
+        if (SupportsSampling(request) && !string.IsNullOrWhiteSpace(intent))
         {
             var toolName = await GetToolNameFromIntentAsync(request, intent, toolsJson, cancellationToken);
             if (toolName != null)
@@ -219,7 +237,7 @@ public class AzureTool : McpServerTool
 
         var response = learnResponse;
 
-        if (SupportsSampling(request))
+        if (SupportsSampling(request) && !string.IsNullOrWhiteSpace(intent))
         {
             var (commandName, parameters) = await GetCommandAndParametersFromIntentAsync(request, intent, tool, toolsJson, cancellationToken);
             if (commandName != null)
@@ -263,6 +281,17 @@ public class AzureTool : McpServerTool
 
         try
         {
+            var progressToken = request.Params?.Meta?.ProgressToken;
+            if (progressToken != null)
+            {
+                await request.Server.NotifyProgressAsync(progressToken.Value,
+                new ProgressNotificationValue
+                {
+                    Progress = 0f,
+                    Message = $"Calling {tool} {command}...",
+                }, cancellationToken);
+            }
+
             return await client.CallToolAsync(command, parameters, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
@@ -294,6 +323,17 @@ public class AzureTool : McpServerTool
 
     private async Task<string?> GetToolNameFromIntentAsync(RequestContext<CallToolRequestParams> request, string intent, string toolsJson, CancellationToken cancellationToken)
     {
+        var progressToken = request.Params?.Meta?.ProgressToken;
+        if (progressToken != null)
+        {
+            await request.Server.NotifyProgressAsync(progressToken.Value,
+            new ProgressNotificationValue
+            {
+                Progress = 0f,
+                Message = $"Learning about azure capabilities...",
+            }, cancellationToken);
+        }
+
         var samplingRequest = new CreateMessageRequestParams
         {
             Messages = [
@@ -339,6 +379,17 @@ public class AzureTool : McpServerTool
         string toolsJson,
         CancellationToken cancellationToken)
     {
+        var progressToken = request.Params?.Meta?.ProgressToken;
+        if (progressToken != null)
+        {
+            await request.Server.NotifyProgressAsync(progressToken.Value,
+            new ProgressNotificationValue
+            {
+                Progress = 0f,
+                Message = $"Learning about {tool} capabilities...",
+            }, cancellationToken);
+        }
+
         var samplingRequest = new CreateMessageRequestParams
         {
             Messages = [

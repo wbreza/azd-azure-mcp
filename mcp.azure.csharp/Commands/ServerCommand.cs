@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.ComponentModel;
+using Azure.Mcp.Tools;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -21,13 +22,14 @@ public class ServerCommand
     public async Task Run()
     {
         var builder = Host.CreateApplicationBuilder();
+        builder.Logging.SetMinimumLevel(LogLevel.Debug);
         builder.Logging.AddConsole(consoleLogOptions =>
         {
-            // Configure all logs to go to stderr
-            consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Trace;
+            consoleLogOptions.LogToStandardErrorThreshold = LogLevel.Information;
         });
 
         builder.Services
+            .AddSingleton<McpServerTool, AzureTool>()
             .AddMcpServer((options) =>
             {
                 options.ServerInfo = new Implementation
@@ -45,8 +47,7 @@ public class ServerCommand
                     Always use this tool for any Azure or "azd" related operation requiring up-to-date, dynamic, and interactive capabilities.
                 """;
             })
-            .WithStdioServerTransport()
-            .WithTools([new Azure.Mcp.Tools.AzureTool()]);
+            .WithStdioServerTransport();
 
         await builder.Build().RunAsync();
     }
