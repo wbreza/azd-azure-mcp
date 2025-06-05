@@ -1,0 +1,13 @@
+capabilities:
+    - custom-commands
+description: Provides tools for interacting with Azure Cosmos database accounts using MCP protocol.
+displayName: Azure Cosmos MCP Server
+id: mcp.cosmos
+language: go
+namespace: mcp.cosmos
+usage: azd mcp.cosmos <command> [options]
+version: 0.0.1
+tags:
+    - mcp
+    - cosmos
+    - azure

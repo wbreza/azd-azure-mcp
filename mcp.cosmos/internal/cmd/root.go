@@ -9,8 +9,8 @@ import (
 
 func NewRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "azd mcp account <command> [options]",
-		Short:         "Provides automation for retrieving information about the Azure account and subscriptions for the currnet logged in user.",
+		Use:           "azd mcp cosmos <command> [options]",
+		Short:         "Provides tools for interacting with Azure Cosmos database accounts using MCP protocol.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{

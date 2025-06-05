@@ -1,6 +1,3 @@
-// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License.
-
 package cmd
 
 import (
@@ -9,8 +6,8 @@ import (
 
 func NewRootCommand() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:           "azd mcp account <command> [options]",
-		Short:         "Provides automation for retrieving information about the Azure account and subscriptions for the currnet logged in user.",
+		Use:           "azd mcp servicebus <command> [options]",
+		Short:         "Provides tools for interacting with Azure Service Bus namespaces using MCP protocol.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{
@@ -22,7 +19,7 @@ func NewRootCommand() *cobra.Command {
 	rootCmd.PersistentFlags().Bool("debug", false, "Enable debug mode")
 
 	rootCmd.AddCommand(newServerCommand())
-	rootCmd.AddCommand(newVersionCommand())
+	// Version command can be added similarly if needed
 
 	return rootCmd
 }

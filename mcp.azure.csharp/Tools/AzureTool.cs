@@ -38,6 +38,52 @@ public class AzureTool : McpServerTool
     private static readonly string ToolCallSchemaJson = JsonSerializer.Serialize(ToolCallSchema, new JsonSerializerOptions { WriteIndented = true });
     private readonly ILogger<AzureTool> _logger;
 
+    // --- Tool list caching fields ---
+    private string? _cachedRootToolsJson;
+    private readonly Dictionary<string, string> _cachedToolListsJson = new(StringComparer.OrdinalIgnoreCase);
+
+    private async Task<string> GetRootToolsJsonAsync()
+    {
+        if (this._cachedRootToolsJson != null)
+        {
+            return this._cachedRootToolsJson;
+        }
+
+        var providerMetadataList = await _providerLoader.ListProviderMetadataAsync();
+        var tools = new List<Tool>();
+        foreach (var meta in providerMetadataList)
+        {
+            tools.Add(new Tool
+            {
+                Name = meta.Id,
+                Description = meta.Description,
+            });
+        }
+        var toolsResult = new ListToolsResult { Tools = tools };
+        var toolsJson = JsonSerializer.Serialize(toolsResult, new JsonSerializerOptions { WriteIndented = true });
+        this._cachedRootToolsJson = toolsJson;
+        return toolsJson;
+    }
+
+    private async Task<string> GetToolListJsonAsync(string tool)
+    {
+        if (this._cachedToolListsJson.TryGetValue(tool, out var cachedJson))
+        {
+            return cachedJson;
+        }
+
+        var client = await _providerLoader.GetProviderClientAsync(tool);
+        if (client == null)
+        {
+            return string.Empty;
+        }
+
+        var listTools = await client.ListToolsAsync();
+        var toolsJson = JsonSerializer.Serialize(listTools, new JsonSerializerOptions { WriteIndented = true });
+        this._cachedToolListsJson[tool] = toolsJson;
+        return toolsJson;
+    }
+
     public override Tool ProtocolTool => new Tool
     {
         Name = "azure",
@@ -134,12 +180,7 @@ public class AzureTool : McpServerTool
         }
         else if (!learn && !string.IsNullOrEmpty(tool) && !string.IsNullOrEmpty(command))
         {
-            Dictionary<string, object?> toolParams = new();
-            if (args != null && args.TryGetValue("parameters", out var parametersElem) && parametersElem.ValueKind == JsonValueKind.Object)
-            {
-                toolParams = JsonSerializer.Deserialize<Dictionary<string, object?>>(parametersElem.GetRawText()) ?? new();
-            }
-
+            var toolParams = GetParametersDictionary(args);
             return await CommandModeAsync(request, intent ?? "", tool!, command!, toolParams, cancellationToken);
         }
 
@@ -161,22 +202,7 @@ public class AzureTool : McpServerTool
 
     private async Task<CallToolResponse> RootLearnModeAsync(RequestContext<CallToolRequestParams> request, string intent, CancellationToken cancellationToken)
     {
-        var providerMetadataList = await _providerLoader.ListProviderMetadataAsync();
-        var tools = new List<Tool>();
-        foreach (var meta in providerMetadataList)
-        {
-            tools.Add(new Tool
-            {
-                Name = meta.Id,
-                Description = meta.Description,
-            });
-        }
-        var toolsResult = new ListToolsResult
-        {
-            Tools = tools,
-        };
-
-        var toolsJson = JsonSerializer.Serialize(toolsResult, new JsonSerializerOptions { WriteIndented = true });
+        var toolsJson = await GetRootToolsJsonAsync();
         var learnResponse = new CallToolResponse
         {
             Content =
@@ -192,9 +218,7 @@ public class AzureTool : McpServerTool
                 }
             ]
         };
-
         var response = learnResponse;
-
         if (SupportsSampling(request) && !string.IsNullOrWhiteSpace(intent))
         {
             var toolName = await GetToolNameFromIntentAsync(request, intent, toolsJson, cancellationToken);
@@ -203,20 +227,16 @@ public class AzureTool : McpServerTool
                 response = await ToolLearnModeAsync(request, intent, toolName, cancellationToken);
             }
         }
-
         return response;
     }
 
     private async Task<CallToolResponse> ToolLearnModeAsync(RequestContext<CallToolRequestParams> request, string intent, string tool, CancellationToken cancellationToken)
     {
-        var client = await _providerLoader.GetProviderClientAsync(tool);
-        if (client == null)
+        var toolsJson = await GetToolListJsonAsync(tool);
+        if (string.IsNullOrEmpty(toolsJson))
         {
             return await RootLearnModeAsync(request, intent, cancellationToken);
         }
-
-        var listToolsResult = await client.ListToolsAsync();
-        var toolsJson = JsonSerializer.Serialize(listToolsResult, new JsonSerializerOptions { WriteIndented = true });
 
         var learnResponse = new CallToolResponse
         {
@@ -234,9 +254,7 @@ public class AzureTool : McpServerTool
                 }
             ]
         };
-
         var response = learnResponse;
-
         if (SupportsSampling(request) && !string.IsNullOrWhiteSpace(intent))
         {
             var (commandName, parameters) = await GetCommandAndParametersFromIntentAsync(request, intent, tool, toolsJson, cancellationToken);
@@ -245,7 +263,6 @@ public class AzureTool : McpServerTool
                 response = await CommandModeAsync(request, intent, tool, commandName, parameters, cancellationToken);
             }
         }
-
         return response;
     }
 
@@ -344,10 +361,14 @@ public class AzureTool : McpServerTool
                         Type = "text",
                         Text = $"""
                             The following is a list of available tools for the Azure server.
-                            Find the tool name that best matches the user's intent and return the name of the tool.
+
+                            Your task:
+                            - Select a single tool that best matches the user's intent and return the name of the tool.
+                            - Only return tool names that are defined in the provided list.
+                            - If no tool matches, return "Unknown".
 
                             Intent:
-                            {intent ?? "No intent provided"}
+                            {intent}
 
                             Available Tools:
                             {toolsJson}
@@ -374,7 +395,7 @@ public class AzureTool : McpServerTool
 
     private async Task<(string? commandName, Dictionary<string, object?> parameters)> GetCommandAndParametersFromIntentAsync(
         RequestContext<CallToolRequestParams> request,
-        string? intent,
+        string intent,
         string tool,
         string toolsJson,
         CancellationToken cancellationToken)
@@ -390,6 +411,9 @@ public class AzureTool : McpServerTool
             }, cancellationToken);
         }
 
+        var toolParams = GetParametersDictionary(request.Params?.Arguments);
+        var toolParamsJson = JsonSerializer.Serialize(toolParams, new JsonSerializerOptions { WriteIndented = true });
+
         var samplingRequest = new CreateMessageRequestParams
         {
             Messages = [
@@ -399,15 +423,26 @@ public class AzureTool : McpServerTool
                     Content = new Content{
                         Type = "text",
                         Text = $"""
-                            This is a list of available tools for the {tool} server.
-                            Find the tool that best matches the user's intent and return a valid JSON object that maps to the following schema:
+                            This is a list of available commands for the {tool} server.
 
-                            Schema:
+                            Your task:
+                            - Select the single command that best matches the user's intent.
+                            - Return a valid JSON object that matches the provided result schema.
+                            - Map the user's intent and known parameters to the command's input schema, ensuring parameter names and types match the schema exactly (no extra or missing parameters).
+                            - Only include parameters that are defined in the selected command's input schema.
+                            - Do not guess or invent parameters.
+                            - If no command matches, return JSON schema with "Unknown" tool name.
+
+                            Result Schema:
                             {ToolCallSchemaJson}
 
-                            Intent: {intent ?? "No intent provided"}
+                            Intent:
+                            {intent}
 
-                            Available Tools:
+                            Known Parameters:
+                            {toolParamsJson}
+
+                            Available Commands:
                             {toolsJson}
                             """
                     }
@@ -443,5 +478,15 @@ public class AzureTool : McpServerTool
             // ignore and return default
         }
         return (null, new Dictionary<string, object?>());
+    }
+
+    private static Dictionary<string, object?> GetParametersDictionary(IReadOnlyDictionary<string, JsonElement>? args)
+    {
+        if (args != null && args.TryGetValue("parameters", out var parametersElem) && parametersElem.ValueKind == JsonValueKind.Object)
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, object?>>(parametersElem.GetRawText()) ?? new();
+        }
+
+        return new Dictionary<string, object?>();
     }
 }

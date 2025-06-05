@@ -1,0 +1,13 @@
+capabilities:
+    - custom-commands
+description: Provides tools for interacting with Azure Service Bus namespaces using MCP protocol.
+displayName: Azure Service Bus MCP Server
+id: mcp.servicebus
+language: go
+namespace: mcp.servicebus
+usage: azd mcp servicebus <command> [options]
+version: 0.0.1
+tags:
+    - mcp
+    - servicebus
+    - azure

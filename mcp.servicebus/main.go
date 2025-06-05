@@ -1,0 +1,29 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+package main
+
+import (
+	"context"
+	"os"
+
+	"github.com/fatih/color"
+	"mcp.servicebus/internal/cmd"
+)
+
+func init() {
+	forceColorVal, has := os.LookupEnv("FORCE_COLOR")
+	if has && forceColorVal == "1" {
+		color.NoColor = false
+	}
+}
+
+func main() {
+	ctx := context.Background()
+	rootCmd := cmd.NewRootCommand()
+
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		color.Red("Error: %v", err)
+		os.Exit(1)
+	}
+}
