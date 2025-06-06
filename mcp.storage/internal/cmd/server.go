@@ -46,6 +46,10 @@ func newServerCommand() *cobra.Command {
 			listAccountsTool := mcp.NewTool(
 				"list-storage-accounts",
 				mcp.WithDescription("Lists all storage accounts in the subscription"),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			createAccountTool := mcp.NewTool(
@@ -63,6 +67,10 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The location to create the storage account in"),
 				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			showAccountTool := mcp.NewTool(
@@ -76,6 +84,10 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The name of the resource group containing the storage account"),
 				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			// Container management tools
@@ -85,6 +97,10 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("storageAccountName",
 					mcp.Required(),
 					mcp.Description("The name of the storage account"),
+				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
 				),
 			)
 
@@ -99,6 +115,10 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The name of the container to create"),
 				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			deleteContainerTool := mcp.NewTool(
@@ -111,6 +131,10 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("containerName",
 					mcp.Required(),
 					mcp.Description("The name of the container to delete"),
+				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
 				),
 			)
 
@@ -125,6 +149,10 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The name of the resource group containing the storage account"),
 				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			listBlobsTool := mcp.NewTool(
@@ -138,6 +166,10 @@ func newServerCommand() *cobra.Command {
 					mcp.Required(),
 					mcp.Description("The name of the container to list blobs for"),
 				),
+				mcp.WithString("subscriptionId",
+					mcp.Required(),
+					mcp.Description("The Azure subscription ID."),
+				),
 			)
 
 			uploadBlobTool := mcp.NewTool(
@@ -147,6 +179,7 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
 				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to upload.")),
 				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to create in the container.")),
+				mcp.WithString("subscriptionId", mcp.Required(), mcp.Description("The Azure subscription ID.")),
 			)
 
 			downloadBlobTool := mcp.NewTool(
@@ -156,6 +189,7 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
 				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to download.")),
 				mcp.WithString("filePath", mcp.Required(), mcp.Description("The local file path to save the blob to.")),
+				mcp.WithString("subscriptionId", mcp.Required(), mcp.Description("The Azure subscription ID.")),
 			)
 
 			deleteBlobTool := mcp.NewTool(
@@ -164,6 +198,7 @@ func newServerCommand() *cobra.Command {
 				mcp.WithString("storageAccountName", mcp.Required(), mcp.Description("The name of the storage account.")),
 				mcp.WithString("containerName", mcp.Required(), mcp.Description("The name of the container.")),
 				mcp.WithString("blobName", mcp.Required(), mcp.Description("The name of the blob to delete.")),
+				mcp.WithString("subscriptionId", mcp.Required(), mcp.Description("The Azure subscription ID.")),
 			)
 
 			// Storage Account Tools
@@ -534,13 +569,18 @@ func newServerCommand() *cobra.Command {
 				return mcp.NewToolResultText(fmt.Sprintf("Blob '%s' deleted successfully from container '%s'.", blobName, container)), nil
 			})
 
-			// Start the HTTP server on http://localhost:8081/mcp
-			sseServer := server.NewStreamableHTTPServer(s,
-				server.WithEndpointPath("/storage/mcp"),
-			)
-			if err := sseServer.Start("localhost:8081"); err != nil {
-				return fmt.Errorf("Failed to start SSE server: %v", err)
+			// Start the server
+			if err := server.ServeStdio(s); err != nil {
+				fmt.Printf("Server error: %v\n", err)
 			}
+
+			// // Start the HTTP server on http://localhost:8081/mcp
+			// sseServer := server.NewStreamableHTTPServer(s,
+			// 	server.WithEndpointPath("/storage/mcp"),
+			// )
+			// if err := sseServer.Start("localhost:8081"); err != nil {
+			// 	return fmt.Errorf("Failed to start SSE server: %v", err)
+			// }
 
 			return nil
 		},

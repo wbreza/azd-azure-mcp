@@ -6,13 +6,18 @@ This repository demonstrates a modular, scalable approach to Azure automation an
 
 ## Extension Examples
 
-- `mcp.azure` - Root extension that hosts the Azure MCP server with dynamic discovery
-- `mcp.account` - Extension MCP server for working with Azure account management
-- `mcp.azd` - Extension MCP server for working with `azd` CLI
-- `mcp.keyvault` - Extension MCP server for working with Azure KeyVault resources
-- `mcp.resource` - Extension MCP server for working with generic Azure resources
-- `mcp.roles` - Extension MCP server for working with Azure role assignments and RBAC
-- `mcp.storage` - Extension MCP server for working with Azure Storage Accounts _**(modeled as a remote MCP server)**_
+| Extension           | Description                                                                                          |
+|---------------------|------------------------------------------------------------------------------------------------------|
+| `mcp.account`       | Extension MCP server for working with Azure account management                                        |
+| `mcp.azd`           | Extension MCP server for working with `azd` CLI                                                       |
+| `mcp.azure`         | Root extension that hosts the Azure MCP server with dynamic discovery                                 |
+| `mcp.azure.csharp`  | Root extension that hosts the Azure MCP server with dynamic discovery (C# version with MCP sampling)  |
+| `mcp.cosmos`        | Extension MCP server for working with Azure Cosmos DB resources                                       |
+| `mcp.keyvault`      | Extension MCP server for working with Azure KeyVault resources                                        |
+| `mcp.resource`      | Extension MCP server for working with generic Azure resources                                         |
+| `mcp.roles`         | Extension MCP server for working with Azure role assignments and RBAC                                |
+| `mcp.servicebus`    | Extension MCP server for working with Azure Service Bus resources                                    |
+| `mcp.storage`       | Extension MCP server for working with Azure Storage Accounts (modeled as a remote MCP server)        |
 
 ## Highlights
 
@@ -124,6 +129,7 @@ sequenceDiagram
     participant AzureMCP as azd mcp azure (Root MCP Server)
     participant azd as azd CLI
     participant Provider as azd mcp Extension (e.g., mcp.storage)
+    participant LLM as LLM (e.g., OpenAI GPT)
 
     %% 1. Root learn
     Note over User,AzureMCP: 1. Root learn (discover top-level tools)
@@ -161,6 +167,18 @@ sequenceDiagram
     AzureMCP->>Provider: Call (command: "delete-blob", parameters)
     Provider-->>AzureMCP: Result
     AzureMCP-->>User: Result
+
+    %% 4. Internal Sampling for Tool/Command Selection
+    Note over AzureMCP: 4. Internal sampling (AzureTool leverages sampling to select tool/command from intent)
+    User->>AzureMCP: Call (intent: "delete a blob", learn: false)
+    AzureMCP->>AzureMCP: Detects intent, no tool/command specified
+    AzureMCP->>LLM: Sampling request ("Which tool matches this intent?")
+    LLM-->>AzureMCP: Tool name (e.g., "storage")
+    AzureMCP->>LLM: Sampling request ("Which command and parameters match this intent?")
+    LLM-->>AzureMCP: Command name and parameters (e.g., "delete-blob", { ... })
+    AzureMCP->>Provider: Call (command: "delete-blob", parameters)
+    Provider-->>AzureMCP: Result
+    AzureMCP-->>User: Result (single round trip)
 ```
 
 ## Design Tradeoffs: Dynamic Extensions vs. Monolithic Server
